@@ -136,9 +136,32 @@ def logged_in(page):
 
 
 def open_screener(page):
-    page.goto(SCREENER, wait_until="domcontentloaded", timeout=60000)
+    """Go to the stock screener the way a person does: home page -> Screening menu -> Stock Screener.
+    (Opening the screener address directly can bounce back to the home page.)"""
+    if "zacks.com" not in page.url or "stock-screener" in page.url:
+        page.goto("https://www.zacks.com/", wait_until="domcontentloaded", timeout=60000)
+        pause(3, 6)
+        dismiss_popups(page)
+    link = first_visible(page, ["a[href*='screening/stock-screener']"], 3000)
+    if not link:
+        menu = first_visible(page, ["a:text-is('Screening')", "nav a:has-text('Screening')"], 5000)
+        if menu:
+            menu.hover()
+            pause(0.8, 1.6)
+            link = first_visible(page, ["a[href*='screening/stock-screener']"], 5000)
+    if link:
+        human_click(page, link)
+        try:
+            page.wait_for_url("**/stock-screener**", timeout=30000)
+        except PWTimeout:
+            pass
+    if "stock-screener" not in page.url:
+        print("menu link did not open the screener - opening it directly")
+        page.goto(SCREENER + "?icid=home-home-nav_tracking-zcom-main_menu_wrapper-stock_screener",
+                  referer="https://www.zacks.com/", wait_until="domcontentloaded", timeout=60000)
     pause(3, 6)
     dismiss_popups(page)
+    print("on page:", page.url.split("?")[0])
 
 
 def login_once(page, user, pw):
@@ -179,9 +202,13 @@ def login_once(page, user, pw):
 
 def login(page, user, pw):
     """Reuse saved cookies if they still work; otherwise at most MAX_LOGIN_TRIES real sign-ins."""
-    open_screener(page)
+    page.goto("https://www.zacks.com/", wait_until="domcontentloaded", timeout=60000)
+    pause(3, 6)
+    dismiss_popups(page)
     if logged_in(page):
         print("still signed in from last time (saved cookies) - no login needed")
+        idle_scroll(page)
+        open_screener(page)
         return
     for attempt in range(1, MAX_LOGIN_TRIES + 1):
         print(f"signing in (attempt {attempt} of {MAX_LOGIN_TRIES})")
@@ -200,10 +227,30 @@ def login(page, user, pw):
                        "press 'Run workflow' yourself (see debug screenshots)")
 
 
+def get_screener(page):
+    """The stock screener lives in an iframe that can load slowly or lazily: scroll to it, wait for it,
+    and reload the page once if it never shows up."""
+    for attempt in range(2):
+        try:
+            el = page.wait_for_selector("iframe[src*='screener-api.zacks.com']", state="attached", timeout=45000)
+            el.scroll_into_view_if_needed(timeout=10000)
+            pause(1, 2.5)
+            fr = el.content_frame()
+            if fr:
+                fr.wait_for_selector("#my-screen-tab a", timeout=45000)
+                return fr
+        except PWTimeout:
+            pass
+        snap(page, f"no-screener-{attempt + 1}")
+        if attempt == 0:
+            print("screener box not ready - reloading the page once")
+            open_screener(page)
+            idle_scroll(page)
+    raise RuntimeError("screener frame not found (see debug screenshots)")
+
+
 def run_saved_screen(page, name):
-    fr = screener_frame(page)
-    if not fr:
-        raise RuntimeError("screener frame not found")
+    fr = get_screener(page)
     tab = first_visible(fr, ["#my-screen-tab a", "a:text-is('My Screen')", "a:text-is('My Screens')"], 20000)
     if not tab:
         raise RuntimeError("'My Screen' tab not found")
