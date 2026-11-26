@@ -2,12 +2,15 @@ name: Daily stock scan
 
 on:
   schedule:
-    # Times are UTC. Weekdays (Mon-Fri):
-    #   22:30 UTC = 5:30 pm New York (winter) / 6:30 pm (summer)
-    #   02:00 UTC next day = backup run in case the data was not ready yet
+    # Times are UTC. The free Massive plan only releases a day's data after that day ends,
+    # so there are three tries; whichever run finds the new day sends the email, the rest do nothing.
+    #   22:30 UTC = 5:30 pm New York (winter)
+    #   02:00 UTC = 9:00 pm New York
+    #   05:30 UTC = 12:30 am New York (data is always ready by then)
     - cron: "30 22 * * 1-5"
     - cron: "0 2 * * 2-6"
-  workflow_dispatch:
+    - cron: "30 5 * * 2-6"
+  workflow_dispatch:        # "Run workflow" button: also downloads older history and rebuilds everything
 
 permissions:
   contents: write
@@ -21,7 +24,7 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 300
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -35,7 +38,7 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Update data, scan, build website, send email
+      - name: Update data, scan, backtest, build website, send email
         id: run
         env:
           PYTHONUNBUFFERED: "1"
@@ -53,7 +56,8 @@ jobs:
         run: |
           git config user.name "scanner-bot"
           git config user.email "scanner-bot@users.noreply.github.com"
-          git add -A
+          git rm -r -q --cached --ignore-unmatch site
+          git add -A -- . ':!site' ':!**/__pycache__' ':!results/backtest.json'
           git diff --cached --quiet || git commit -m "Scan $(date -u +%Y-%m-%d)"
           git push
 
