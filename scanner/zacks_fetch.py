@@ -62,8 +62,9 @@ def human_click(page, loc, wander=True):
     if not _on_target(loc, x, y):
         # something is covering the target (a pop-up or an open menu): close pop-ups / step aside, come back
         dismiss_popups(page)
-        page.mouse.move(x + 260, y + 220, steps=8)
-        pause(0.8, 1.4)
+        park_mouse(page)                       # into the page body, well clear of the tall menus
+        click_blank(page)                      # and click empty space to close a stuck menu
+        pause(0.4, 0.9)
         box = loc.bounding_box() or box
         x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
         page.mouse.move(x, y, steps=6)
@@ -80,14 +81,19 @@ def human_click(page, loc, wander=True):
 
 def _on_target(loc, x, y):
     """Is the element under the mouse point the one we mean to click (or inside it)?
-    Works for elements inside the screener iframe too."""
+    For the screener (an iframe from another Zacks address) the frame's offset is measured from outside."""
     try:
-        return loc.evaluate("""(el, p) => {
-            let doc = el.ownerDocument, fx = 0, fy = 0, fe = doc.defaultView.frameElement;
-            if (fe) { const r = fe.getBoundingClientRect(); fx = r.left; fy = r.top; }
-            const top = doc.elementFromPoint(p[0] - fx, p[1] - fy);
-            return !!top && (top === el || el.contains(top) || top.contains(el) && top.tagName === 'LABEL');
-        }""", [x, y])
+        fx = fy = 0.0
+        h = loc.element_handle(timeout=3000)
+        fr = h.owner_frame()
+        if fr and fr.parent_frame:
+            fb = fr.frame_element().bounding_box()
+            if fb:
+                fx, fy = fb["x"], fb["y"]
+        return h.evaluate("""(el, p) => {
+            const top = el.ownerDocument.elementFromPoint(p[0], p[1]);
+            return !!top && (top === el || el.contains(top));
+        }""", [x - fx, y - fy])
     except Exception:
         return True
 
@@ -99,6 +105,58 @@ def human_type(page, loc, text):
         page.keyboard.type(ch)
         time.sleep(random.uniform(0.06, 0.19) + (random.uniform(0.2, 0.5) if random.random() < 0.06 else 0))
     pause(0.4, 1.2)
+
+
+def park_mouse(page):
+    """Move the mouse down into the page body (away from the green menu bar) so no drop-down stays
+    open - like a person reading the page after a click."""
+    vw = (page.viewport_size or {"width": 1440, "height": 1000})
+    page.mouse.move(random.uniform(.30, .60) * vw["width"], random.uniform(.62, .85) * vw["height"],
+                    steps=random.randint(10, 20))
+    pause(0.7, 1.4)
+
+
+BLANK_JS = """([x, y]) => {
+    const el = document.elementFromPoint(x, y);
+    if (!el) return false;
+    if (el.closest('a,button,input,select,textarea,label,iframe,img,video,[onclick],[role=button],nav,ul,li,.dd,ins'))
+        return false;
+    return ['BODY','HTML','DIV','SECTION','MAIN','HEADER','P','H1','H2','H3','SPAN','TD','TR','TABLE'].includes(el.tagName)
+        && !(el.textContent || '').trim().match(/^(Sign|Log|Delete|Remove|Save|Allow|Accept)/i);
+}"""
+
+
+def click_blank(page):
+    """Click an empty white spot, as you would to close a stuck drop-down menu.
+    Prefers the white space to the right of the page heading (e.g. 'Zacks Stock Screener')."""
+    vw = page.viewport_size or {"width": 1440, "height": 1000}
+    spots = []
+    head = first_visible(page, ["h1:has-text('Stock Screener')", "h2:has-text('Stock Screener')",
+                                "text=Zacks Stock Screener", "h1", "h2"], 3000)
+    if head:
+        b = head.bounding_box()
+        if b:
+            for dx in (260, 340, 420, 180):
+                spots.append((b["x"] + b["width"] + dx + random.uniform(-20, 20), b["y"] + b["height"] / 2))
+    spots += [(random.uniform(12, 40), random.uniform(.45, .75) * vw["height"]),            # left page margin
+              (vw["width"] - random.uniform(12, 40), random.uniform(.45, .75) * vw["height"])]  # right margin
+    for x, y in spots:
+        if 0 < x < vw["width"] and 0 < y < vw["height"]:
+            try:
+                if page.evaluate(BLANK_JS, [x, y]):
+                    page.mouse.move(x, y, steps=random.randint(10, 20))
+                    pause(0.3, 0.7)
+                    page.mouse.click(x, y, delay=random.randint(50, 130))
+                    print("clicked an empty spot to close menus")
+                    pause(0.6, 1.2)
+                    return True
+            except Exception:
+                pass
+    print("no empty spot found - pressing Escape and moving into the page margin")
+    page.keyboard.press("Escape")
+    page.mouse.move(random.uniform(10, 30), random.uniform(.5, .8) * vw["height"], steps=12)
+    pause(0.6, 1.2)
+    return False
 
 
 def idle_scroll(page):
@@ -207,6 +265,7 @@ def open_screener(page):
             print("clicking Screening (top bar)")
             human_click(page, top)
             _wait_url(page, "**/screening/**")
+            park_mouse(page)                       # off the menu bar, or its drop-down pops open
             pause(2.5, 5)
             dismiss_popups(page)
             idle_scroll(page)                      # glance down the page like a reader
@@ -216,11 +275,14 @@ def open_screener(page):
             print("clicking", link.inner_text().strip())
             human_click(page, link)
             _wait_url(page, "**/stock-screener**")
+            park_mouse(page)
     if "stock-screener" not in page.url:
         print("links did not open the screener - opening it directly")
         page.goto(SCREENER, referer="https://www.zacks.com/screening/", wait_until="domcontentloaded", timeout=60000)
+    park_mouse(page)
     pause(3, 6)
     dismiss_popups(page)
+    click_blank(page)                              # a stuck drop-down only closes on a click elsewhere
     print("on page:", page.url.split("?")[0])
 
 
@@ -321,6 +383,8 @@ def get_screener(page):
 
 
 def run_saved_screen(page, name):
+    park_mouse(page)                               # make sure no menu drop-down covers the screener tabs
+    click_blank(page)
     fr = get_screener(page)
     tab = first_visible(fr, ["#my-screen-tab a", "a:text-is('My Screen')", "a:text-is('My Screens')"], 20000)
     if not tab:
