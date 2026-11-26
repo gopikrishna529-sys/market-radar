@@ -38,6 +38,7 @@ jobs:
       - name: Update data, scan, build website, send email
         id: run
         env:
+          PYTHONUNBUFFERED: "1"
           MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
