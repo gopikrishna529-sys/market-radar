@@ -30,6 +30,7 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check -q playwright pyyaml
           python -m playwright install --with-deps chromium
+          sudo apt-get install -y -qq xvfb >/dev/null 2>&1 || echo 'xvfb not installed - will run headless'
 
       - name: Restore saved sign-in cookies
         uses: actions/cache/restore@v4
@@ -53,7 +54,13 @@ jobs:
           ZACKS_USERNAME: ${{ secrets.ZACKS_USERNAME }}
           ZACKS_PASSWORD: ${{ secrets.ZACKS_PASSWORD }}
           ZACKS_SCREEN: ${{ vars.ZACKS_SCREEN }}
-        run: python -m scanner.zacks_fetch ${{ github.event_name == 'workflow_dispatch' && '--manual' || '' }}
+        run: |
+          ARGS="${{ github.event_name == 'workflow_dispatch' && '--manual' || '' }}"
+          if command -v xvfb-run >/dev/null; then
+            ZACKS_HEADED=1 xvfb-run -a --server-args="-screen 0 1440x1000x24" python -m scanner.zacks_fetch $ARGS
+          else
+            python -m scanner.zacks_fetch $ARGS
+          fi
 
       - name: Lock and keep cookies for next time
         if: success()

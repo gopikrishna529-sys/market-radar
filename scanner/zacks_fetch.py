@@ -39,7 +39,7 @@ def pause(lo=0.8, hi=2.4):
 FORBIDDEN = ("delete", "remove", "logout", "update", "save")
 
 
-def human_click(page, loc):
+def human_click(page, loc, wander=True):
     """Scroll to the element, glide the mouse to a random point inside it, hesitate, click.
     Refuses to click anything that could change the account (Delete, Remove, Save, ...)."""
     label = " ".join(filter(None, [loc.inner_text(timeout=3000) if loc.count() else "",
@@ -55,13 +55,40 @@ def human_click(page, loc):
         return
     x = box["x"] + box["width"] * random.uniform(0.3, 0.7)
     y = box["y"] + box["height"] * random.uniform(0.3, 0.7)
-    page.mouse.move(x + random.uniform(-200, 200), y + random.uniform(-120, 120), steps=random.randint(5, 12))
+    if wander:   # approach from below/right, away from the menu bar so no drop-down opens on the way
+        page.mouse.move(x + random.uniform(40, 220), y + random.uniform(30, 140), steps=random.randint(5, 12))
     page.mouse.move(x, y, steps=random.randint(10, 25))
     pause(0.15, 0.5)
+    if not _on_target(loc, x, y):
+        # something (e.g. an open menu) is covering the target: step aside, let it close, come straight back
+        page.mouse.move(x + 260, y + 220, steps=8)
+        pause(0.8, 1.4)
+        box = loc.bounding_box() or box
+        x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+        page.mouse.move(x, y, steps=6)
+        pause(0.2, 0.5)
+        if not _on_target(loc, x, y):
+            loc.click(delay=random.randint(50, 140), timeout=10000)   # let the browser aim exactly
+            pause()
+            return
     page.mouse.down()
     time.sleep(random.uniform(0.05, 0.14))
     page.mouse.up()
     pause()
+
+
+def _on_target(loc, x, y):
+    """Is the element under the mouse point the one we mean to click (or inside it)?
+    Works for elements inside the screener iframe too."""
+    try:
+        return loc.evaluate("""(el, p) => {
+            let doc = el.ownerDocument, fx = 0, fy = 0, fe = doc.defaultView.frameElement;
+            if (fe) { const r = fe.getBoundingClientRect(); fx = r.left; fy = r.top; }
+            const top = doc.elementFromPoint(p[0] - fx, p[1] - fy);
+            return !!top && (top === el || el.contains(top) || top.contains(el) && top.tagName === 'LABEL');
+        }""", [x, y])
+    except Exception:
+        return True
 
 
 def human_type(page, loc, text):
@@ -135,30 +162,41 @@ def logged_in(page):
     return page.locator("a[href*='logout']").count() > 0
 
 
+def _wait_url(page, pattern, ms=30000):
+    try:
+        page.wait_for_url(pattern, timeout=ms)
+    except Exception:
+        pass
+
+
 def open_screener(page):
-    """Go to the stock screener the way a person does: home page -> Screening menu -> Stock Screener.
-    (Opening the screener address directly can bounce back to the home page.)"""
-    if "zacks.com" not in page.url or "stock-screener" in page.url:
+    """Two plain clicks, like a person, no drop-down menus:
+       1. 'Screening' in the green top bar -> the Screening page
+       2. 'Stock Screener' (Top Zacks Features box) or 'Custom Stock Screener' -> the stock screener"""
+    if "zacks.com" not in page.url:
         page.goto("https://www.zacks.com/", wait_until="domcontentloaded", timeout=60000)
         pause(3, 6)
         dismiss_popups(page)
-    link = first_visible(page, ["a[href*='screening/stock-screener']"], 3000)
-    if not link:
-        menu = first_visible(page, ["a:text-is('Screening')", "nav a:has-text('Screening')"], 5000)
-        if menu:
-            menu.hover()
-            pause(0.8, 1.6)
-            link = first_visible(page, ["a[href*='screening/stock-screener']"], 5000)
-    if link:
-        human_click(page, link)
-        try:
-            page.wait_for_url("**/stock-screener**", timeout=30000)
-        except PWTimeout:
-            pass
+    if "/screening" not in page.url or "stock-screener" in page.url:
+        page.mouse.wheel(0, -3000)                 # top bar is at the top of the page
+        pause(0.8, 1.6)
+        top = first_visible(page, ["a:text-is('Screening')"], 8000)
+        if top:
+            print("clicking Screening (top bar)")
+            human_click(page, top)
+            _wait_url(page, "**/screening/**")
+            pause(2.5, 5)
+            dismiss_popups(page)
+            idle_scroll(page)                      # glance down the page like a reader
     if "stock-screener" not in page.url:
-        print("menu link did not open the screener - opening it directly")
-        page.goto(SCREENER + "?icid=home-home-nav_tracking-zcom-main_menu_wrapper-stock_screener",
-                  referer="https://www.zacks.com/", wait_until="domcontentloaded", timeout=60000)
+        link = first_visible(page, ["a:text-is('Stock Screener')", "a:has-text('Custom Stock Screener')"], 8000)
+        if link:
+            print("clicking", link.inner_text().strip())
+            human_click(page, link)
+            _wait_url(page, "**/stock-screener**")
+    if "stock-screener" not in page.url:
+        print("links did not open the screener - opening it directly")
+        page.goto(SCREENER, referer="https://www.zacks.com/screening/", wait_until="domcontentloaded", timeout=60000)
     pause(3, 6)
     dismiss_popups(page)
     print("on page:", page.url.split("?")[0])
@@ -192,24 +230,35 @@ def login_once(page, user, pw):
         else:
             pw_box.press("Enter")
         try:
-            page.wait_for_load_state("domcontentloaded", timeout=60000)
-        except PWTimeout:
+            page.wait_for_selector("a[href*='logout']", state="attached", timeout=30000)   # signed in
+        except Exception:
             pass
-        pause(4, 7)
+        pause(3, 6)
+    if not logged_in(page):
+        return False
     open_screener(page)
-    return logged_in(page)
+    if "stock-screener" not in page.url:
+        print("signed in, but Zacks did not open the stock screener (landed on", page.url.split("?")[0] + ")")
+        return False
+    return True
 
 
 def login(page, user, pw):
-    """Reuse saved cookies if they still work; otherwise at most MAX_LOGIN_TRIES real sign-ins."""
+    """Already signed in (saved cookies)? Just navigate to the screener. If Zacks won't open the
+    screener with that old session, clear it and sign in properly (at most MAX_LOGIN_TRIES attempts)."""
     page.goto("https://www.zacks.com/", wait_until="domcontentloaded", timeout=60000)
     pause(3, 6)
     dismiss_popups(page)
     if logged_in(page):
-        print("still signed in from last time (saved cookies) - no login needed")
+        print("already signed in (saved session) - going to the screener")
         idle_scroll(page)
         open_screener(page)
-        return
+        if "stock-screener" in page.url:
+            return
+        print("Zacks did not open the screener with the saved session - signing in fresh")
+        snap(page, "saved-session-refused")
+        page.context.clear_cookies()
+        pause(2, 4)
     for attempt in range(1, MAX_LOGIN_TRIES + 1):
         print(f"signing in (attempt {attempt} of {MAX_LOGIN_TRIES})")
         try:
@@ -338,13 +387,20 @@ def main():
     (OUT / "latest.csv").unlink(missing_ok=True)      # no longer used: the newest dated file is read
     saved, failed = [], []
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
-        ctx = browser.new_context(storage_state=str(STATE) if STATE.exists() else None, user_agent=UA, viewport={"width": 1440, "height": 1000},
+        headed = os.environ.get("ZACKS_HEADED") == "1"     # a normal (visible) browser on a virtual screen
+        print("browser:", "normal window (virtual screen)" if headed else "headless")
+        browser = p.chromium.launch(headless=not headed, args=["--disable-blink-features=AutomationControlled",
+                                                                "--window-size=1440,1000"])
+        ua = None if headed else (f"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                                  f"Chrome/{browser.version} Safari/537.36")     # honest: matches the real machine
+        ctx = browser.new_context(storage_state=str(STATE) if STATE.exists() else None, user_agent=ua, viewport={"width": 1440, "height": 1000},
                                   locale="en-US", timezone_id="America/New_York", accept_downloads=True)
         ctx.add_init_script("Object.defineProperty(navigator,'webdriver',{get:()=>undefined})")
         page = ctx.new_page()
         try:
             login(page, user, pw)
+            STATE.parent.mkdir(exist_ok=True)
+            ctx.storage_state(path=str(STATE))      # remember the sign-in for next time
             for k, (name, prefix) in enumerate(screens):
                 dest = OUT / f"{prefix}_{day}.csv"       # e.g. zacks_rank_27-11-2026.csv (New York date)
                 try:
@@ -360,8 +416,6 @@ def main():
                 except Exception as e:
                     snap(page, f"error-{prefix}")
                     failed.append(f"{name}: {e}")
-            STATE.parent.mkdir(exist_ok=True)
-            ctx.storage_state(path=str(STATE))      # keep cookies so tomorrow needs no login
         except Exception as e:
             snap(page, "error")
             browser.close()
