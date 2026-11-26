@@ -1,0 +1,68 @@
+name: Daily stock scan
+
+on:
+  schedule:
+    # Times are UTC. Weekdays (Mon-Fri):
+    #   22:30 UTC = 5:30 pm New York (winter) / 6:30 pm (summer)
+    #   02:00 UTC next day = backup run in case the data was not ready yet
+    - cron: "30 22 * * 1-5"
+    - cron: "0 2 * * 2-6"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: daily-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Update data, scan, build website, send email
+        id: run
+        env:
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+        run: |
+          python run.py ${{ github.event_name == 'workflow_dispatch' && '--force' || '' }}
+          if [ -f site/index.html ]; then echo "site=yes" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Save new data to the repository
+        if: always()
+        run: |
+          git config user.name "scanner-bot"
+          git config user.email "scanner-bot@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "Scan $(date -u +%Y-%m-%d)"
+          git push
+
+      - name: Prepare website
+        if: steps.run.outputs.site == 'yes'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Publish website
+        if: steps.run.outputs.site == 'yes'
+        id: deploy
+        uses: actions/deploy-pages@v4
