@@ -25,7 +25,7 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 120
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -37,7 +37,16 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - run: pip install -r requirements.txt
+      - name: Install Python packages
+        timeout-minutes: 12
+        run: |
+          # --no-compile skips byte-compiling thousands of pandas files (the slow part);
+          # each attempt is capped at 3 minutes and retried, so a stuck install cannot hang the run
+          for i in 1 2 3; do
+            timeout 180 python -m pip install --no-compile --only-binary=:all: --disable-pip-version-check -q -r requirements.txt && break
+            echo "install attempt $i failed or timed out - retrying"
+          done
+          python -c "import pandas, numpy, requests, yaml; print('packages ready: pandas', pandas.__version__)"
 
       - name: Update data, scan, backtest, build website, send email
         id: run

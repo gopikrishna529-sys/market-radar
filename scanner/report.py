@@ -90,6 +90,7 @@ def build_email(result, bt=None):
         f'{result["breadth"]["pct_above_ema200"]}% above 200 EMA</p>',
         f'<p style="margin:0 0 8px"><a href="{site}">Open the full website →</a></p>' if site else "",
         _strategy_section(bt, h2, site),
+        _zacks_section(result, h2, lim),
         f'<h2 {h2}>🚀 EMA trend + {CONFIG["breakout"]["lookback_days"]}-day breakout ({len(result["breakouts"])})</h2>',
         _stock_table(result["breakouts"], lim),
         f'<h2 {h2}>🔻 EMA downtrend + {CONFIG["breakout"]["lookback_days"]}-day breakdown ({len(result.get("breakdowns", []))}, weakest RS first)</h2>',
@@ -121,6 +122,29 @@ def build_email(result, bt=None):
                f"{len(result.get('breakdowns', []))} breakdowns, "
                f"{len(result['rs_days'])} RS-day, {len(result['rs_leaders'])} RS leaders")
     return subject, "".join(parts)
+
+
+def _zacks_section(result, h2, lim):
+    """Stocks from the saved Zacks screen that are also in the EMA uptrend (breakouts first)."""
+    try:
+        from .zacks import load_latest
+        z = load_latest()
+    except Exception as e:
+        print("zacks section skipped:", e)
+        return ""
+    if not z:
+        return ""
+    ti = z["ticker_col"]
+    zset = {r[ti] for r in z["rows"]}
+    new = set(z["new"])
+    bo = {r["ticker"] for r in result["breakouts"]}
+    rows = [dict(r, name=("🆕 " if r["ticker"] in new else "") + ("🚀 " if r["ticker"] in bo else "") + (r.get("name") or ""))
+            for r in result["trend"] if r["ticker"] in zset]
+    rows.sort(key=lambda r: (r["ticker"] not in bo, -(r["rs"] or 0)))
+    return (f'<h2 {h2}>🎯 Zacks screen ({fmt_date(z["date"])}): {len(zset)} stocks, {len(rows)} in EMA uptrend</h2>'
+            '<p style="font-size:12px;color:#666;margin:0 0 6px">🚀 = 20-day breakout today · 🆕 = new in the screen'
+            + (f' since {fmt_date(z["prev_date"])}' if z["prev_date"] else "") + "</p>"
+            + _stock_table(rows, lim))
 
 
 def _strategy_section(bt, h2, site):

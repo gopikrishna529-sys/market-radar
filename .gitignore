@@ -1,0 +1,7 @@
+*.pyc
+.DS_Store
+.env
+__pycache__/
+debug/
+site/
+.zacks_state/

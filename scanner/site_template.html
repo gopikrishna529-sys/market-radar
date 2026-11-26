@@ -98,6 +98,7 @@ table.trades tbody tr{cursor:pointer} tr.sel td{background:#1d2a3a!important}
     <a href="#watchlist" data-r="watchlist">Watchlist</a>
     <a href="#sectors" data-r="sectors">Sectors</a>
     <a href="#rotation" data-r="rotation">Sector Rotation</a>
+    <a href="#zacks" data-r="zacks">Zacks</a>
     <a href="#download" data-r="download">Download</a>
   </nav>
   <div class="hsearch"><input id="gq" placeholder="Search ticker or company…  ( / )" autocomplete="off" spellcheck="false"></div>
@@ -879,6 +880,41 @@ async function viewDownload(){
     saveCSV(`scanner_${fd(d)}.csv`,out); };
 }
 
+
+/* ------------------------------------------------------------------ ZACKS */
+const ZK={trend:"",nw:false,liq:false,q:"",st:{k:null,d:1}};
+async function viewZacks(){
+  let z; try{ z=await J("data/zacks.json"); }catch(e){ z=null; }
+  if(!z){ $("#main").innerHTML=`<h2>Zacks screen</h2><div class="empty">No Zacks screen downloaded yet. It appears here after the “Zacks screen download” workflow has run once.</div>`; return; }
+  const ti=z.ticker_col, nz=z.columns.length, newSet=new Set(z.new);
+  const zcols=z.columns.map((c,i)=>[i,c]).filter(([i])=>i!==ti);
+  const OUR=[[nz,"Trend"],[nz+2,"RS"],[nz+3,"Chg %"],[nz+4,"1M %"]];
+  $("#main").innerHTML=`<div class="row" style="margin-bottom:12px;justify-content:space-between"><div class="row"><h2>Zacks screen</h2>
+      <span class="muted">${fd(z.date)} · ${z.rows.length} stocks${z.prev_date?` · ${z.new.length} new since ${fd(z.prev_date)}`:""} · Zacks columns plus this site's EMA trend and RS</span></div>
+      <button id="zexp">⬇ Export (CSV)</button></div>
+    <div class="card"><div class="row" style="gap:10px">
+      <select id="ztr"><option value="">Any trend</option><option value="L">In EMA uptrend</option><option value="S">In EMA downtrend</option><option value="N">No trend</option></select>
+      <label class="muted"><input type="checkbox" id="znew"> new in screen only</label>
+      <label class="muted"><input type="checkbox" id="zliq"> liquid only (scanner filter)</label>
+      <input id="zq" placeholder="Filter ticker" style="width:160px"></div></div>
+    <div class="card"><h3>Stocks <span class="n" id="zcount"></span> <small>click a column to sort · click a ticker for its chart · <span class="gold">NEW</span> = not in the previous day's screen</small></h3><div class="tbl-wrap scroll" id="ztbl" style="max-height:640px"></div></div>`;
+  $("#ztr").value=ZK.trend; $("#znew").checked=ZK.nw; $("#zliq").checked=ZK.liq; $("#zq").value=ZK.q;
+  const filt=()=>z.rows.filter(r=>{ const s=r[nz]||"N"; return (!ZK.trend||s===ZK.trend)&&(!ZK.nw||newSet.has(r[ti]))&&(!ZK.liq||r[nz+5])&&(!ZK.q||String(r[ti]).includes(ZK.q.toUpperCase())); });
+  const draw=()=>{ let rows=filt(); if(ZK.st.k!=null) rows=sortRows(rows,ZK.st.k,ZK.st.d); $("#zcount").textContent=rows.length;
+    const th=(k,l)=>`<th data-zk="${k}">${esc(l)}${ZK.st.k===k?(ZK.st.d>0?" ▲":" ▼"):""}</th>`;
+    $("#ztbl").innerHTML=rows.length?`<table><thead><tr>${th(ti,z.columns[ti]||"Ticker")}${zcols.map(([i,c])=>th(i,c)).join("")}${OUR.map(([k,l])=>th(k,l)).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>
+      <td><span class="tk" data-tk="${esc(r[ti])}">${esc(r[ti])}</span>${newSet.has(r[ti])?' <span class="gold">NEW</span>':""} ${starHTML(r[ti])}</td>
+      ${zcols.map(([i])=>`<td class="${typeof r[i]==="number"?"":"nm"}">${esc(r[i]??"")}</td>`).join("")}
+      <td>${stateHTML(r[nz],r[nz+1])}</td><td>${r[nz+2]??"–"}</td><td class="${cls(r[nz+3])}">${pct(r[nz+3])}</td><td class="${cls(r[nz+4])}">${pct(r[nz+4],1)}</td></tr>`).join("")}</tbody></table>`:'<div class="empty">No stocks match.</div>';
+    document.querySelectorAll("#ztbl th").forEach(h=>h.onclick=()=>{ const k=+h.dataset.zk; ZK.st.d=ZK.st.k===k?-ZK.st.d:1; ZK.st.k=k; draw(); }); };
+  $("#ztr").onchange=e=>{ZK.trend=e.target.value;draw();}; $("#znew").onchange=e=>{ZK.nw=e.target.checked;draw();};
+  $("#zliq").onchange=e=>{ZK.liq=e.target.checked;draw();}; $("#zq").oninput=e=>{ZK.q=e.target.value;draw();};
+  $("#zexp").onclick=()=>{ const st=s=>s==="L"?"Uptrend":s==="S"?"Downtrend":"";
+    saveCSV(`zacks-${z.date}.csv`,[[z.columns[ti],...zcols.map(([,c])=>c),"New","EMA trend","Days in trend","RS","Chg %","1M %"],
+      ...filt().map(r=>[r[ti],...zcols.map(([i])=>r[i]),newSet.has(r[ti])?"yes":"",st(r[nz]),r[nz+1]||"",r[nz+2],r[nz+3],r[nz+4]])]); };
+  await stocks(); draw();
+}
+
 /* ------------------------------------------------------------------ router */
 async function route(){
   const [r,arg,arg2]=(location.hash.slice(1)||"portfolio").split("/");
@@ -887,7 +923,7 @@ async function route(){
   if(PF.eq&&r!=="portfolio"){ PF.eq.destroy(); PF.eq=null; }
   try{
     if(r==="scanner") await viewScanner(); else if(r==="chart") await viewChart(arg&&decodeURIComponent(arg),arg2);
-    else if(r==="watchlist") await viewWatchlist(); else if(r==="download") await viewDownload(); else if(r==="sectors") await viewSectors(arg==="group"?decodeURIComponent(arg2||""):""); else if(r==="rotation") await viewRotation(); else await viewPortfolio();
+    else if(r==="watchlist") await viewWatchlist(); else if(r==="download") await viewDownload(); else if(r==="sectors") await viewSectors(arg==="group"?decodeURIComponent(arg2||""):""); else if(r==="rotation") await viewRotation(); else if(r==="zacks") await viewZacks(); else await viewPortfolio();
   }catch(e){ console.error(e); $("#main").innerHTML=`<div class="empty">Could not load this page (${esc(e.message)}).</div>`; }
 }
 window.addEventListener("hashchange",route);

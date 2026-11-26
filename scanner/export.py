@@ -109,6 +109,22 @@ def build_site(w, ind):
         "groups": CONFIG.get("groups", {}),
         "rows": rows}, separators=(",", ":")))
 
+    # Zacks saved-screen CSV, joined with our own trend/RS columns
+    from .zacks import load_latest
+    z = load_latest()
+    if z:
+        ti = z["ticker_col"]
+        ours = {r[0]: r for r in rows}
+        zr = []
+        for r in z["rows"]:
+            o = ours.get(r[ti])
+            zr.append(r + ([o[5], o[6], o[4], o[3], o[17], o[9]] if o else ["", 0, None, None, None, False]))
+        (data / "zacks.json").write_text(json.dumps({
+            "date": z["date"], "prev_date": z["prev_date"], "new": z["new"], "ticker_col": ti,
+            "columns": z["columns"], "ours": ["state", "days", "rs", "chg", "perf_1m", "in_scan"],
+            "rows": zr}, separators=(",", ":")))
+        print(f"zacks: {len(zr)} stocks in the {z['date']} screen, {len(z['new'])} new")
+
     html = TEMPLATE.read_text().replace("__TITLE__", CONFIG["report"]["site_title"])
     html = html.replace("__EMA__", json.dumps(CONFIG["ema"]))
     html = html.replace("__REPO__", os.environ.get("GITHUB_REPOSITORY", ""))
