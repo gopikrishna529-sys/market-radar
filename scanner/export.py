@@ -110,7 +110,11 @@ def build_site(w, ind):
         "rows": rows}, separators=(",", ":")))
 
     # Zacks saved-screen CSV, joined with our own trend/RS columns
-    from .zacks import load_latest
+    from .zacks import load_info, load_latest
+    zi = load_info()
+    (data / "zinfo.json").write_text(json.dumps(zi, separators=(",", ":")))
+    if zi:
+        print(f"zacks: info for {len(zi)} tickers, {sum('target' in v for v in zi.values())} with a target price")
     z = load_latest()
     if z:
         ti = z["ticker_col"]

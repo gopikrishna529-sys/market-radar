@@ -110,3 +110,17 @@ groups:
   GDX: {industry: ["precious metals", "gold"]}
   ITA: {industry: ["aerospace", "military", "ordnance"]}
   JETS: {industry: ["airline", "air transport", "air freight"]}
+
+# Zacks Premium saved screens, downloaded every weekday by the "Zacks screen download" workflow.
+# name = the screen's name exactly as in Zacks > Stock Screener > My Screen
+# file = start of the saved file name: data/zacks/<file>_DD-MM-YYYY.csv
+zacks:
+  screens:
+    - name: market-radar
+      file: zacks_rank
+    - name: market-radar-target-price
+      file: zacks_targets
+    # - name: another-screen              # <- more screens can be added like this
+    #   file: zacks_other
+  # columns drawn as dashed lines on the chart: any column whose name contains one of these words
+  chart_levels: [target]

@@ -86,6 +86,7 @@ table.trades tbody tr{cursor:pointer} tr.sel td{background:#1d2a3a!important}
 .dl-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:1000px){.dl-grid{grid-template-columns:1fr}}
 .dl-grid .card p{margin:4px 0 12px}
 .Leading{color:var(--leading)}.Improving{color:var(--improving)}.Weakening{color:var(--weakening)}.Lagging{color:var(--lagging)}
+.zstrip{margin-top:10px;padding-top:10px;border-top:1px solid var(--line,#1e2833)}.zstrip:empty{display:none}.zpill{display:inline-block;padding:2px 9px;border-radius:5px;color:#fff;font-weight:650;font-size:13px}
 </style>
 </head>
 <body>
@@ -227,7 +228,14 @@ class RChart{
       const st=niceStep((mx-mn)/Math.max(2,Math.floor((bot-top)/52)));
       g.strokeStyle="#18212b"; g.lineWidth=1; g.fillStyle="#9aa6b4"; g.textAlign="left"; g.font=`13px ${F}`;
       for(let v=Math.ceil(mn/st)*st; v<=mx; v+=st){ const y=Math.round(Y(v))+.5; if(y<y0+4||y>y0+ph-4) continue; g.beginPath(); g.moveTo(0,y); g.lineTo(plotW,y); g.stroke(); g.fillText(fmt(v),plotW+9,y); }
-      for(const r of (p.refs||[])){ const y=Math.round(Y(r.v))+.5; g.setLineDash([4,4]); g.strokeStyle=r.color||"#3a4654"; g.beginPath(); g.moveTo(0,y); g.lineTo(plotW,y); g.stroke(); g.setLineDash([]); }
+      for(const r of (p.refs||[])){ if(r.label) continue; const y=Math.round(Y(r.v))+.5; g.setLineDash([4,4]); g.strokeStyle=r.color||"#3a4654"; g.beginPath(); g.moveTo(0,y); g.lineTo(plotW,y); g.stroke(); g.setLineDash([]); }
+      { let stackTop=0, stackBot=0;                 // labelled levels (e.g. Zacks price targets)
+        for(const r of (p.refs||[]).filter(r=>r.label)){ const yy=Y(r.v), off=yy<top?-1:yy>bot?1:0, col=r.color||"#c77dff";
+          const y=Math.round(off<0?top+10+stackTop*22:off>0?bot-10-stackBot*22:yy)+.5; if(off<0) stackTop++; if(off>0) stackBot++;
+          if(!off){ g.setLineDash([7,5]); g.strokeStyle=col; g.lineWidth=1.4; g.beginPath(); g.moveTo(0,y); g.lineTo(plotW,y); g.stroke(); g.setLineDash([]); g.lineWidth=1; }
+          const t=(off<0?"▲ ":off>0?"▼ ":"")+r.label; g.font=`600 12.5px ${F}`; const tw2=g.measureText(t).width+14;
+          g.fillStyle=col; g.globalAlpha=.92; g.fillRect(plotW-tw2-6,y-10,tw2,20); g.globalAlpha=1; g.fillStyle="#fff"; g.textAlign="left"; g.fillText(t,plotW-tw2+1,y);
+          if(!off){ g.fillStyle=col; g.fillRect(plotW+1,y-10,axisW-2,20); g.fillStyle="#fff"; g.fillText(fmt(r.v),plotW+7,y); } } }
       g.save(); g.beginPath(); g.rect(0,y0,plotW,ph); g.clip();
       for(const s of p.series){
         if(s.type==="candle"){ const w=Math.max(1,bw*.68);
@@ -602,9 +610,9 @@ async function viewChart(ticker,focus){
       <div class="seg"><button id="zin" title="Zoom in">＋</button><button id="zout" title="Zoom out">－</button></div>
       <button id="mbtn" title="Measure a move: click and drag on the chart (or hold Shift and drag anywhere). Esc clears it.">📏 Measure</button>
       ${recent.length>1?`<span class="muted">Recent:</span><div class="chips">${recent.slice(1,9).map(t=>`<span class="chip" data-tk="${esc(t)}">${esc(t)}</span>`).join("")}<span class="chip" id="rclr" title="Clear recent tickers">✕</span></div>`:""}</div>
-    <div class="card" style="padding:12px 14px"><div class="info" id="cinfo"></div></div>
+    <div class="card" style="padding:12px 14px"><div class="info" id="cinfo"></div><div class="info zstrip" id="zstrip"></div></div>
     <div class="card" style="padding:8px" id="cvcard"><div class="row" style="padding:2px 4px 8px;gap:8px">
-        <span class="muted">Panels:</span><div class="seg" id="pnl"><button data-p="macd">MACD</button><button data-p="dmi">DMI</button></div>
+        <span class="muted">Panels:</span><div class="seg" id="pnl"><button data-p="macd">MACD</button><button data-p="dmi">DMI</button><button data-p="tgt" title="Zacks price targets (from your saved screens)">🎯 Targets</button></div>
         <button id="fsb" style="margin-left:auto">⛶ Full screen</button></div><div id="cv"></div>
       <div class="note" style="padding:6px 8px 2px">Drag the chart, or swipe/scroll on the date line = move · pinch, ＋/－ or Ctrl/⌘ + scroll = zoom · drag the price axis = zoom prices (any pane) · up/down scroll = scroll the page · double-click = reset to 70 candles · 📏 Measure (or Shift): drag, or click the start and click again at the end · Esc clears.<br><span style="color:#26a69a">▲ BUY</span> / <span style="color:#ef5350">▼ SHORT</span> = strategy entry (next open after the EMA trend is set) ·
       <span class="gold">EXIT</span> = position closed, with its result · <span style="color:#7fc4ff">small ▲ under a candle</span> = close above the previous 20-day high · <span style="color:#ff8a80">small ▼ above a candle</span> = close below the previous 20-day low ·
@@ -632,7 +640,12 @@ async function viewChart(ticker,focus){
     if(c[i]!=null&&c[i]>hh) markers.push({i,pos:"below",dir:"up",size:4.5,color:"#7fc4ff"});
     let ll=Infinity; for(let k=i-20;k<i;k++) if(l[k]!=null&&l[k]<ll) ll=l[k];                          // close below previous 20-day low
     if(c[i]!=null&&c[i]<ll) markers.push({i,pos:"above",dir:"down",size:4.5,color:"#ff8a80"}); }
-  const PANES={price:{w:3.2,title:ticker+" · D",bands,markers,series:[{type:"candle",o,h,l,c,tag:true,tagColor:c.at(-1)>=o.at(-1)?"#26a69a":"#ef5350"},
+  let levels=[], zi=null; try{ const ZI=await (CH.zi ||= J("data/zinfo.json")); zi=ZI[ticker]||null; } catch(e){}
+  if(zi){ const last=c.at(-1), lab=(n,v)=>`${n} ${fmtPx(v)} (${v>=last?"+":""}${((v/last-1)*100).toFixed(1)}%)`;
+    if(zi.target) levels.push({v:zi.target,color:"#9c6ade",label:lab("Avg broker target",zi.target)});
+    for(const [n,v] of (zi.levels||[])) levels.push({v,color:"#7e57c2",label:lab(n.replace(/zacks\s*/i,""),v)}); }
+  $("#zstrip").innerHTML=zacksStrip(zi,c.at(-1));
+  const PANES={price:{w:3.2,title:ticker+" · D"+(zi&&zi.rank?` · Zacks #${zi.rank} ${zi.rank_txt}`:"")+(zi&&zi.broker!=null?` · Brokers ${(+zi.broker).toFixed(2)} ${zi.broker_txt}`:""),bands,markers,get refs(){ return CH.hide.tgt?[]:levels; },series:[{type:"candle",o,h,l,c,tag:true,tagColor:c.at(-1)>=o.at(-1)?"#26a69a":"#ef5350"},
       ...EP.map((p,k)=>({type:"line",name:"EMA"+p,v:t.e[p],color:EMA_COL[p]||["#00bcd4","#4c9ffe","#f5a623","#ec407a","#c77dff"][k%5],width:1.2+k*.2})),
       {type:"volume",v,o,c,overlay:true,nolegend:true}]},
     macd:{w:1,title:"MACD 12 26 9",fmt:x=>x.toFixed(Math.abs(x)<1?3:2),refs:[{v:0,inRange:true}],series:[
@@ -882,6 +895,20 @@ async function viewDownload(){
 
 
 /* ------------------------------------------------------------------ ZACKS */
+const ZCOL={1:"#1b8a3a",2:"#43a047",3:"#f5a623",4:"#ef6c00",5:"#d32f2f"}, SCOL={A:"#1b8a3a",B:"#43a047",C:"#f5a623",D:"#ef6c00",F:"#d32f2f"};
+function zacksStrip(zi,last){
+  if(!zi) return "";
+  const pill=(txt,bg,tip)=>`<span class="zpill" style="background:${bg}" title="${esc(tip||"")}">${txt}</span>`;
+  const bcol=b=>b<1.5?ZCOL[1]:b<2.5?ZCOL[2]:b<3.5?ZCOL[3]:b<4.5?ZCOL[4]:ZCOL[5];
+  const out=[`<span class="muted">Zacks <small>(${fd(zi.date)})</small></span>`];
+  if(zi.rank) out.push(`<span class="muted">Rank</span>${pill("#"+zi.rank+" "+zi.rank_txt,ZCOL[zi.rank],"Zacks Rank: 1 = Strong Buy … 5 = Strong Sell")}`);
+  if(zi.broker!=null&&zi.broker!=="") out.push(`<span class="muted">Brokers</span>${pill((+zi.broker).toFixed(2)+" "+zi.broker_txt,bcol(+zi.broker),"Average broker recommendation: 1.0 = Strong Buy … 5.0 = Strong Sell")}`);
+  if(zi.target) out.push(`<span class="muted">Avg target</span><b>${fmtPx(zi.target)}</b><span class="${cls(zi.target-last)}">${pct((zi.target/last-1)*100,1)} from here</span>`);
+  const sc=[["value","Value"],["growth","Growth"],["momentum","Momentum"],["vgm","VGM"]].filter(([k])=>zi[k]);
+  if(sc.length) out.push(`<span class="muted">Scores</span>`+sc.map(([k,l])=>`<span class="muted">${l}</span>${pill(zi[k],SCOL[zi[k]]||"#555","Style score: A best … F worst")}`).join(""));
+  return out.join(" ");
+}
+
 const ZK={trend:"",nw:false,liq:false,q:"",st:{k:null,d:1}};
 async function viewZacks(){
   let z; try{ z=await J("data/zacks.json"); }catch(e){ z=null; }

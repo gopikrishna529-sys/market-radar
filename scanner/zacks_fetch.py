@@ -4,7 +4,8 @@
 
 Needs ZACKS_USERNAME and ZACKS_PASSWORD (GitHub secrets). ZACKS_SCREEN is the name of the
 saved screen under "My Screens"; if empty, the first saved screen is used.
-Saves data/zacks/zacks_rank_DD-MM-YYYY.csv (New York date) and data/zacks/latest.csv.
+Screens to download are listed in config.yaml (zacks: screens:); each is saved as
+data/zacks/<file>_DD-MM-YYYY.csv (New York date).
 On any failure it saves screenshots and page HTML in debug/ so the problem can be seen.
 """
 import csv
@@ -256,11 +257,24 @@ def download_csv(page, fr, dest):
     print("saved the CSV from Zacks' export link")
 
 
+def screens_to_fetch():
+    try:
+        import yaml
+        cfg = yaml.safe_load((ROOT / "config.yaml").read_text()) or {}
+        lst = [x for x in (cfg.get("zacks") or {}).get("screens") or [] if x and x.get("name")]
+    except Exception as e:
+        print("could not read config.yaml:", e)
+        lst = []
+    if not lst:
+        lst = [{"name": (os.environ.get("ZACKS_SCREEN") or "").strip(), "file": "zacks_rank"}]
+    return [(x["name"], x.get("file") or "zacks_rank") for x in lst]
+
+
 def main():
     user, pw = os.environ.get("ZACKS_USERNAME"), os.environ.get("ZACKS_PASSWORD")
     if not user or not pw:
         sys.exit("ZACKS_USERNAME / ZACKS_PASSWORD secrets are not set")
-    name = (os.environ.get("ZACKS_SCREEN") or "").strip()
+    screens = screens_to_fetch()
     manual = "--manual" in sys.argv
     if FAIL_MARK.exists() and not manual:
         print(f"Zacks login failed on {FAIL_MARK.read_text().strip()}; skipping automatic runs so the account "
@@ -274,7 +288,8 @@ def main():
         time.sleep(wait)
     day = datetime.now(ZoneInfo("America/New_York")).strftime("%d-%m-%Y")
     OUT.mkdir(parents=True, exist_ok=True)
-    dest = OUT / f"zacks_rank_{day}.csv"      # e.g. zacks_rank_27-11-2026.csv (New York date)
+    (OUT / "latest.csv").unlink(missing_ok=True)      # no longer used: the newest dated file is read
+    saved, failed = [], []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
         ctx = browser.new_context(storage_state=str(STATE) if STATE.exists() else None, user_agent=UA, viewport={"width": 1440, "height": 1000},
@@ -283,8 +298,21 @@ def main():
         page = ctx.new_page()
         try:
             login(page, user, pw)
-            fr = run_saved_screen(page, name)
-            download_csv(page, fr, dest)
+            for k, (name, prefix) in enumerate(screens):
+                dest = OUT / f"{prefix}_{day}.csv"       # e.g. zacks_rank_27-11-2026.csv (New York date)
+                try:
+                    if k:
+                        pause(4, 9)                       # a person would take a moment between screens
+                    fr = run_saved_screen(page, name)
+                    download_csv(page, fr, dest)
+                    text = dest.read_text(errors="replace")
+                    if text.lstrip().startswith("<"):
+                        dest.unlink()
+                        raise RuntimeError("got a web page instead of a CSV (signed out?)")
+                    saved.append(f"{dest.name}: {text.count(chr(10))} lines")
+                except Exception as e:
+                    snap(page, f"error-{prefix}")
+                    failed.append(f"{name}: {e}")
             STATE.parent.mkdir(exist_ok=True)
             ctx.storage_state(path=str(STATE))      # keep cookies so tomorrow needs no login
         except Exception as e:
@@ -292,11 +320,10 @@ def main():
             browser.close()
             sys.exit(f"Zacks download failed: {e}")
         browser.close()
-    text = dest.read_text(errors="replace")
-    if text.lstrip().startswith("<"):
-        sys.exit("Zacks returned a web page instead of a CSV (probably signed out)")
-    (OUT / "latest.csv").write_text(text)
-    print(f"saved {dest.relative_to(ROOT)}: {text.count(chr(10))} lines")
+    for x in saved:
+        print("saved data/zacks/" + x)
+    if failed:
+        sys.exit("some screens failed:\n  " + "\n  ".join(failed))
 
 
 if __name__ == "__main__":
