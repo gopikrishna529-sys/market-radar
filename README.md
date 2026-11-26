@@ -90,6 +90,7 @@ After that, it runs **by itself every weekday at 5:30 pm New York time**, with a
 - **Long:** the EMA trend becomes set (EMA9 > EMA20 > EMA50 > EMA100 > EMA200) → buy at the **next day's open**. Exit at the next open after a **close below the EMA50**.
 - **Short:** the reverse order (EMA9 < EMA20 < EMA50 < EMA100 < EMA200) → short at the next open; cover at the next open after a **close above the EMA50**.
 - **Every signal is traded** (no position limit). The portfolio's daily return is the equal-weighted average of all open trades; a dollar view assumes $10,000 per trade.
+- Stocks, ADRs and ETFs are traded; 2x/3x leveraged and inverse ETFs are excluded (`exclude_leveraged_etfs` in `config.yaml`).
 - Liquid stocks only (checked on the signal day): price ≥ $10, ≥ 300k shares and ≥ $20M traded per day (50-day averages). 0.05% cost per side. Change these in `config.yaml` (`universe:` and `backtest:`).
 - Known limits: dividends are not included, and stocks that have since been delisted are left out, which flatters results slightly.
 

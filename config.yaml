@@ -15,7 +15,8 @@ history:
 
 # Which stocks to scan
 universe:
-  ticker_types: ["CS", "ADRC"]   # CS = common stock, ADRC = ADRs. ETFs are excluded.
+  ticker_types: ["CS", "ADRC", "ETF", "ETV"]   # common stocks, ADRs, ETFs and ETF-like funds (e.g. GLD)
+  exclude_leveraged_etfs: true   # drop 2x/3x leveraged and inverse ETFs (they decay over time by design)
   # Liquidity filter (checked on the signal day for the backtest, on the last day for the scanner)
   min_price: 10.0                # ignore stocks below $10
   min_avg_volume: 300000         # 50-day average shares traded per day

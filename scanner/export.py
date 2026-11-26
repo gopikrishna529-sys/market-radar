@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from .config import CONFIG
-from .data_store import load_tickers
+from .data_store import load_all_tickers
 from .indicators import rs_rating, streak
 from .scan import scan_universe
 
@@ -45,7 +45,7 @@ def build_site(w, ind):
     # which tickers get a chart
     ch = CONFIG.get("chart", {})
     c = w["close"]
-    tick = load_tickers().set_index("ticker")
+    tick = load_all_tickers().drop_duplicates("ticker").set_index("ticker")
     last, avgv = c.iloc[-1], ind["avg_vol"].iloc[-1]
     stocks = [t for t in c.columns if t in tick.index
               and last.get(t, 0) >= ch.get("min_price", 1) and avgv.get(t, 0) >= ch.get("min_avg_volume", 50000)]

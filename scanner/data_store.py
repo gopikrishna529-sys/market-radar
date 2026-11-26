@@ -181,8 +181,10 @@ def update_reference(client, force=False):
 
     # tickers - weekly
     last = meta.get("tickers_updated")
-    if force or not last or (today - dt.date.fromisoformat(last)).days >= 7 or not (REF / "tickers.csv").exists():
-        from .config import CONFIG
+    from .config import CONFIG
+    types = list(CONFIG["universe"]["ticker_types"])
+    if (force or not last or (today - dt.date.fromisoformat(last)).days >= 7 or not (REF / "tickers.csv").exists()
+            or meta.get("ticker_types") != types):
         rows = []
         for t in CONFIG["universe"]["ticker_types"]:
             for r in client.tickers(t):
@@ -191,7 +193,8 @@ def update_reference(client, force=False):
         if rows:
             pd.DataFrame(rows).drop_duplicates("ticker").to_csv(REF / "tickers.csv", index=False)
             meta["tickers_updated"] = today.isoformat()
-            print(f"ticker list: {len(rows)} stocks")
+            meta["ticker_types"] = types
+            print(f"ticker list: {len(rows)} stocks and funds")
 
     # splits - every run, small incremental window
     splits_file = REF / "splits.csv"
@@ -256,6 +259,25 @@ def load_panel(days=None):
     return wide
 
 
-def load_tickers():
+LEVERAGED = (r"(?i)\b(?:2x|3x|4x|-1x|-2x|-3x|1\.5x|1\.25x|ultra|ultrapro|ultrashort|leveraged|inverse|bear|bull|daily target)\b"
+             r"|\bshort\b(?!\s*-?\s*(?:term|duration|maturity|dated))|direxion daily|proshares ultra")
+
+
+def load_all_tickers():
+    """Every ticker in the list, including leveraged ETFs (used for charts only)."""
     f = REF / "tickers.csv"
-    return pd.read_csv(f) if f.exists() else pd.DataFrame(columns=["ticker", "name", "type", "exchange"])
+    return pd.read_csv(f, dtype={"ticker": str}) if f.exists() else pd.DataFrame(columns=["ticker", "name", "type", "exchange"])
+
+
+def load_tickers():
+    """Tradable ticker list (leveraged / inverse ETFs removed when configured)."""
+    from .config import CONFIG
+    f = REF / "tickers.csv"
+    if not f.exists():
+        return pd.DataFrame(columns=["ticker", "name", "type", "exchange"])
+    t = pd.read_csv(f, dtype={"ticker": str})
+    if CONFIG["universe"].get("exclude_leveraged_etfs", True) and "type" in t:
+        fund = t["type"].isin(["ETF", "ETV", "ETN"])
+        lev = t["name"].fillna("").str.contains(LEVERAGED, regex=True)
+        t = t[~(fund & lev)]
+    return t

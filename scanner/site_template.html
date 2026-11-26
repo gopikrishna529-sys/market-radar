@@ -69,6 +69,10 @@ tr:hover .wl,.wl.on,.info .wl{opacity:1}.wl.on{color:var(--accent);border-color:
 table.trades tbody tr{cursor:pointer} tr.sel td{background:#1d2a3a!important}
 .loading{color:var(--muted);padding:30px;text-align:center}
 .hsearch{position:relative;margin-left:auto}
+#cvcard.full{position:fixed;inset:0;z-index:50;margin:0;border-radius:0;overflow:auto}
+.tbl-wrap.scroll{max-height:620px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.tbl-wrap.scroll thead th{position:sticky;top:0;background:var(--panel);z-index:2}
+.qbox{max-height:200px;overflow:auto}
 .hsearch input{width:300px;padding:7px 12px 7px 32px;background:#121820 url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%238794a3' stroke-width='2'><circle cx='6' cy='6' r='5'/><path d='M10 10l3 3'/></svg>") no-repeat 11px center}
 .asof{margin-left:16px!important}
 .ac{position:absolute;z-index:60;background:#121a23;border:1px solid #2c3a4a;border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.55);max-height:420px;overflow:auto;min-width:340px;display:none}
@@ -143,10 +147,16 @@ class RChart{
     this.ys=cfg.panes.map(()=>({s:1,o:0})); this.measureMode=false; this.meas=null;
     this.reset(cfg.initial||70); this.hover=null; this.my=null;
     const c=this.cv, pos=e=>{const r=c.getBoundingClientRect(); return [e.clientX-r.left,e.clientY-r.top];};
-    c.addEventListener("wheel",e=>{e.preventDefault(); const [x,y]=pos(e); const f=e.deltaY>0?1.12:1/1.12; const pi=this.paneAt(y);
+    c.addEventListener("wheel",e=>{ const [x,y]=pos(e); const pi=this.paneAt(y);
+      const zoom=e.ctrlKey||e.metaKey;                              // trackpad pinch, or Ctrl/⌘ + scroll
+      const horiz=Math.abs(e.deltaX)>Math.abs(e.deltaY), onDates=y>this.H-28;   // the date line along the bottom
+      if(!zoom&&!horiz&&!onDates) return;                           // up/down scroll over the chart: the page scrolls
+      e.preventDefault();                                           // (also stops the Mac back-swipe over the chart)
+      if(!zoom){ if(!onDates) return;                               // sideways swipe moves the chart only on the date line
+        const dd=horiz?e.deltaX:e.deltaY, d=dd/this.plotW*(this.to-this.from); this.from+=d; this.to+=d; this.clamp(); this.draw(); return; }
+      const f=Math.exp(Math.max(-.25,Math.min(.25,e.deltaY*.008)));
       if(x>this.plotW&&pi!=null){ this.ys[pi].s=Math.max(.05,Math.min(40,this.ys[pi].s*f)); this.draw(); return; }
-      const a=this.iOf(x); let span=(this.to-this.from)*f; span=Math.max(10,Math.min(this.n+40,span));
-      this.from=a-(a-this.from)*span/(this.to-this.from); this.to=this.from+span; this.clamp(); this.draw();},{passive:false});
+      this.zoomAt(x,f); },{passive:false});
     c.addEventListener("pointerdown",e=>{ const [x,y]=pos(e); const pi=this.paneAt(y); c.setPointerCapture(e.pointerId);
       if(this.meas&&this.meas.live&&this.meas.waiting){ this.meas.i1=Math.round(this.iOf(Math.min(x,this.plotW))); this.meas.v1=this.valAt(this.meas.pi,y); this.finishMeasure(); return; }
       if(x>this.plotW&&pi!=null){ this.axisDrag={pi,y,s0:this.ys[pi].s}; return; }
@@ -176,6 +186,8 @@ class RChart{
   destroy(){ this.ro.disconnect(); window.removeEventListener("keydown",this.onKey); }
   reset(count){ this.to=this.n-1+3; this.from=this.to-Math.min(count,this.n+3); }
   setBars(count){ this.reset(count); this.draw(); }
+  zoomAt(x,f){ const a=this.iOf(x); let span=(this.to-this.from)*f; span=Math.max(10,Math.min(this.n+40,span));
+    this.from=a-(a-this.from)*span/(this.to-this.from); this.to=this.from+span; this.clamp(); this.draw(); }
   setMeasure(on){ this.measureMode=on; }
   highlight(a,b){ this.hl=[a,b]; this.draw(); }
   centerOn(i,span){ span=span||(this.to-this.from); this.from=i-span/2; this.to=i+span/2; this.clamp(); this.draw(); }
@@ -391,10 +403,10 @@ async function viewPortfolio(){
     <span class="muted">closed <b class="${cls(md.dollars.closed_pnl)}">$${num(md.dollars.closed_pnl,0)}</b> · still open <b class="${cls(md.dollars.open_pnl)}">$${num(md.dollars.open_pnl,0)}</b></span>
     <span class="muted">most trades open at once <b style="color:var(--text)">${md.dollars.max_open}</b> (avg ${md.dollars.avg_open})</span>
     <span class="muted">capital needed at the peak <b style="color:var(--text)">$${num(md.dollars.peak_capital,0)}</b> → return on it <b class="${cls(md.dollars.return_on_peak)}">${pct(md.dollars.return_on_peak,1)}</b></span></div></div>`:""}
-  <div class="card"><h3>Equity curve <small>account starts at 100 · strategy vs SPY buy &amp; hold · drag to pan, scroll to zoom, double-click to reset</small></h3><div id="eq"></div></div>
+  <div class="card"><h3>Equity curve <small>account starts at 100 · strategy vs SPY buy &amp; hold · drag, or swipe on the date line, to move · pinch or Ctrl/⌘ + scroll to zoom · double-click to reset</small></h3><div id="eq"></div></div>
   <div class="card"><h3>Signals by date <small>every entry the rules produced on a day · click a row to open it on the chart</small></h3>
     <div class="row" style="margin-bottom:10px"><button id="sdp" title="Earlier date">‹</button><select id="sdsel"></select><button id="sdn" title="Later date">›</button><input id="sdq" placeholder="Filter ticker or company" style="width:200px" value="${esc(PF.sdq||"")}"><span class="muted" id="sdsum"></span></div>
-    <div class="tbl-wrap" id="sdtbl"></div></div>
+    <div class="tbl-wrap scroll" id="sdtbl"></div></div>
   <div class="grid2">
     <div class="card"><h3>Monthly returns <small>portfolio, %</small></h3><div class="tbl-wrap" id="heat"></div></div>
     <div class="card"><h3>Trade return distribution <small>closed trades, % per trade</small></h3><div id="hist"></div></div>
@@ -404,8 +416,11 @@ async function viewPortfolio(){
     <div class="card"><h3>Max run-up vs final result <small>each dot is a closed trade · above the line = gave back less</small></h3><canvas id="mfe" style="width:100%;height:330px"></canvas>
       <div class="note" id="mfenote"></div></div>
   </div>
-  <div class="card"><h3>Orders for the next open <small>from the latest close</small></h3><div id="orders"></div></div>
-  <div class="card"><h3>Open positions <small>held in the portfolio now</small></h3><div class="tbl-wrap" id="openpos"></div></div>
+  <div class="card"><h3>Orders for the next open <small>from the latest close</small></h3><div id="orders" class="qbox"></div></div>
+  <div class="card"><h3>Open positions <span class="n" id="opn"></span> <small>held now · click a column to sort · click a row to open the chart</small></h3>
+    <div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="kpis" id="opstats" style="flex:1;margin:0"></div></div>
+    <div class="row" style="margin-bottom:10px"><button id="opexp">⬇ Export open positions (CSV)</button><span class="note" id="opnote"></span></div>
+    <div class="tbl-wrap scroll" id="openpos"></div></div>
   <div class="card"><h3>Trade log <small>click a column to sort · click a row to open the chart</small></h3>
     <div class="row" style="margin-bottom:8px"><span class="muted">Entered:</span>
       <div class="seg" id="trng">${[["1M",1],["3M",3],["6M",6],["1Y",12],["YTD","ytd"],["All",0]].map(([l,v])=>`<button data-v="${v}">${l}</button>`).join("")}</div>
@@ -417,7 +432,7 @@ async function viewPortfolio(){
       <select id="tstat"><option value="all">All trades</option><option value="closed">Closed</option><option value="open">Open</option></select>
       <span class="muted" id="tcount"></span></div>
     <div class="note" id="tsum" style="margin-bottom:8px"></div>
-    <div class="tbl-wrap" id="tlog"></div><div class="pager" id="tpager"></div></div>`;
+    <div class="tbl-wrap scroll" id="tlog"></div><div class="pager" id="tpager"></div></div>`;
   $("#tside").value=PF.f.side; $("#tstat").value=PF.f.status;
   document.querySelectorAll("#pfmode button").forEach(x=>x.onclick=()=>{PF.mode=x.dataset.m;viewPortfolio();});
 
@@ -443,10 +458,17 @@ async function viewPortfolio(){
     <div class="note" style="margin-top:8px">${histRows.length} trades · median ${pct(ts.median_pnl)} · best ${pct(ts.best)} · worst ${pct(ts.worst)} · longest win streak ${ts.max_win_streak??"–"} · longest losing streak ${ts.max_loss_streak??"–"}</div>`;
 
   // stats table
+  const MB=b.modes, D0=b.settings.dollars_per_trade||10000, sumP=side=>b.rows.filter(r=>side==="both"||r.side===side).reduce((a,r)=>a+(r.pnl||0),0);
+  const TOT=[["both","All trades"],["long","Long"],["short","Short"]].map(([k])=>({k,m:MB[k]||{},sum:sumP(k)}));
+  const totRows=[["Portfolio total return",x=>`<b class="${cls(x.m.stats?.total)}">${pct(x.m.stats?.total)}</b>`],["Portfolio CAGR",x=>`<span class="${cls(x.m.stats?.cagr)}">${pct(x.m.stats?.cagr)}</span>`],
+    ["Portfolio max drawdown",x=>`<span class="down">${pct(x.m.stats?.max_dd)}</span>`],["Sharpe",x=>x.m.stats?.sharpe??"–"],
+    ["Sum of all trade returns",x=>`<span class="${cls(x.sum)}">${pct(x.sum,0)}</span>`],
+    ["Total profit at $"+num(D0,0)+" / trade",x=>`<b class="${cls(x.m.dollars?.total_pnl)}">$${num(x.m.dollars?.total_pnl,0)}</b>`],
+    ["…of which still open",x=>`<span class="${cls(x.m.dollars?.open_pnl)}">$${num(x.m.dollars?.open_pnl,0)}</span>`]];
   const rowsS=[["Trades","trades",""],["Closed / open",null,""],["Win rate","win_rate","%"],["Average trade","avg_pnl","%s"],["Median trade","median_pnl","%s"],["Average win","avg_win","%s"],["Average loss","avg_loss","%s"],["Payoff (avg win ÷ avg loss)","payoff",""],["Profit factor","profit_factor",""],["Best trade","best","%s"],["Worst trade","worst","%s"],["Avg days held","avg_bars",""],["Avg max run-up (MFE)","avg_mfe","%s"],["Avg max drawdown (MAE)","avg_mae","%s"],["Run-up of losing trades","avg_mfe_losers","%s"],["Drawdown of winning trades","avg_mae_winners","%s"],["Trades that ran ≥10%","pct_mfe_over_10","%"],["Profit captured of run-up","capture","%"],["Longest win / loss streak",null,""]];
   const cell=(o,k,f)=>{ if(k==null) return ""; const v=o[k]; if(v==null) return "–"; return f==="%s"?`<span class="${cls(v)}">${pct(v)}</span>`:f==="%"?v+"%":v; };
   const spec=(o,l)=>l==="Closed / open"?`${o.closed??"–"} / ${o.open??"–"}`:`${o.max_win_streak??"–"} / ${o.max_loss_streak??"–"}`;
-  const EVS=b.every_signal; $("#stats").innerHTML=`<table><thead><tr><th></th><th class="r">All trades</th><th class="r">Long</th><th class="r">Short</th></tr></thead><tbody>${rowsS.map(([l,k,f])=>`<tr><td>${l}</td>${[EVS.both,EVS.long,EVS.short].map(o=>`<td class="r">${o?(k?cell(o,k,f):spec(o,l)):"–"}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+  const EVS=b.every_signal; $("#stats").innerHTML=`<table><thead><tr><th></th><th class="r">All trades</th><th class="r">Long</th><th class="r">Short</th></tr></thead><tbody>${totRows.map(([l,f])=>`<tr><td><b>${l}</b></td>${TOT.map(x=>`<td class="r">${f(x)}</td>`).join("")}</tr>`).join("")}<tr><td colspan="4" style="padding:2px"></td></tr>${rowsS.map(([l,k,f])=>`<tr><td>${l}</td>${[EVS.both,EVS.long,EVS.short].map(o=>`<td class="r">${o?(k?cell(o,k,f):spec(o,l)):"–"}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
 
   // MFE scatter
   drawScatter($("#mfe"),histRows);
@@ -464,6 +486,27 @@ async function viewPortfolio(){
   // open positions
   const op=b.rows.filter(r=>r.status!=="closed"&&inPF(r)&&inMode(r));
   sortedTable($("#openpos"),op,PF.ops ||= {k:"pnl",d:-1},"No open positions.");
+  { const D=b.settings.dollars_per_trade||10000, L=op.filter(r=>r.side==="long"), S=op.filter(r=>r.side==="short"), win=op.filter(r=>r.pnl>0);
+    const sum=a=>a.reduce((x,r)=>x+(r.pnl||0),0), avg=(a,k)=>a.length?a.reduce((x,r)=>x+(r[k]||0),0)/a.length:null, usd=a=>sum(a)/100*D;
+    const best=op.reduce((m,r)=>!m||r.pnl>m.pnl?r:m,null), worst=op.reduce((m,r)=>!m||r.pnl<m.pnl?r:m,null), exitN=op.filter(r=>r.status!=="open").length;
+    const k2=(l,v,sub,c="")=>`<div class="kpi"><div class="l">${l}</div><div class="v ${c}">${v}</div>${sub?`<div class="s">${sub}</div>`:""}</div>`;
+    $("#opstats").innerHTML=op.length?[
+      k2("Open positions",op.length,`${L.length} long · ${S.length} short`),
+      k2("Unrealised P&L",`$${num(usd(op),0)}`,`at $${num(D,0)} per trade · ${num(op.length*D,0)} invested`,cls(usd(op))),
+      k2("Long P&L",`$${num(usd(L),0)}`,`avg ${pct(avg(L,"pnl"))}`,cls(usd(L))),
+      k2("Short P&L",`$${num(usd(S),0)}`,`avg ${pct(avg(S,"pnl"))}`,cls(usd(S))),
+      k2("Avg open trade",pct(avg(op,"pnl")),`${(win.length/op.length*100).toFixed(1)}% in profit`,cls(avg(op,"pnl"))),
+      k2("Best / worst",`<span class="up">${pct(best.pnl,1)}</span> / <span class="down">${pct(worst.pnl,1)}</span>`,`${esc(best.ticker)} · ${esc(worst.ticker)}`),
+      k2("Avg days held",(avg(op,"bars")??0).toFixed(1),""),
+      k2("Avg max run-up",pct(avg(op,"mfe")),`avg max drawdown ${pct(avg(op,"mae"))}`,"up"),
+      k2("Exit at next open",exitN,"closed beyond EMA"+EMA.exit+" today"),
+      k2("Net exposure",`$${num((L.length-S.length)*D,0)}`,`long $${num(L.length*D,0)} · short $${num(S.length*D,0)}`)].join(""):"";
+    $("#opn").textContent=op.length.toLocaleString()+" open";
+    $("#opnote").textContent=op.length?`P&L marked at the ${fd(b.data_end)} close.`:"";
+    $("#opexp").onclick=()=>{ const st2=STOCKS||{map:{}}, rows=sortRows(op,PF.ops.k,PF.ops.d);
+      const out=[["ticker","name","side","signal_date","entry_date","entry_price","last_price","days_held","pnl_pct","pnl_usd","max_runup_pct","max_drawdown_pct","status","rs_score"]];
+      for(const r of rows) out.push([r.ticker,(st2.map[r.ticker]||{}).name||"",r.side,fd(r.signal),fd(r.entry_date),r.entry,r.exit,r.bars,r.pnl,Math.round((r.pnl||0)/100*D),r.mfe,r.mae,r.status==="open"?"open":"exit at next open",r.score]);
+      saveCSV(`open-positions_${fd(b.data_end)}.csv`,out); }; }
   // signals by date
   const pend=((b.next_open||{}).enter||[]).filter(inMode).map(x=>({ticker:x.ticker,side:x.side,signal:b.data_end,entry_date:null,entry:null,exit_date:null,exit:null,bars:null,pnl:null,mfe:null,mae:null,status:"pending",in_pf:"",score:x.score}));
   const bySig={}; for(const r of [...b.rows.filter(inMode),...pend]) (bySig[r.signal] ||= []).push(r);
@@ -519,7 +562,7 @@ function renderLog(){
   $("#tsum").innerHTML=`<b>${rows.length.toLocaleString()}</b> trades entered ${PF.f.from?fd(PF.f.from):fd(BT.rows[0]?.entry_date)} → ${PF.f.to?fd(PF.f.to):fd(BT.data_end)}
     (${rows.filter(r=>r.side==="long").length} long · ${rows.filter(r=>r.side==="short").length} short) · win rate <b>${cl.length?(w.length/cl.length*100).toFixed(1)+"%":"–"}</b>
     · avg closed trade <b class="${cls(avg)}">${pct(avg)}</b> · total at $${num(D,0)}/trade <b class="${cls(tot)}">$${num(tot,0)}</b>`;
-  rows=sortRows(rows,PF.sort.k,PF.sort.d); const per=50, pages=Math.max(1,Math.ceil(rows.length/per)); PF.page=Math.min(PF.page,pages-1);
+  rows=sortRows(rows,PF.sort.k,PF.sort.d); const per=100, pages=Math.max(1,Math.ceil(rows.length/per)); PF.page=Math.min(PF.page,pages-1);
   $("#tcount").textContent=`${rows.length.toLocaleString()} trades`;
   $("#tlog").innerHTML=rows.length?tradeTable(rows.slice(PF.page*per,PF.page*per+per),PF.sort):'<div class="empty">No trades match.</div>';
   $("#tpager").innerHTML=`<button ${PF.page?"":"disabled"} id="pp">‹ Prev</button> Page ${PF.page+1} of ${pages} <button ${PF.page<pages-1?"":"disabled"} id="pn">Next ›</button>`;
@@ -541,22 +584,26 @@ function drawScatter(cv,rows){
 }
 
 /* ------------------------------------------------------------------ CHART */
-let CH={ticker:null,chart:null,bars:70};
+let CH={ticker:null,chart:null,bars:70,full:false,hide:(()=>{try{return JSON.parse(localStorage.getItem("mr_hide"))||{macd:false,dmi:false};}catch(e){return {macd:false,dmi:false};}})()};
 async function viewChart(ticker,focus){
+  CH.full=false;
   const st=await stocks(); ticker=(ticker||CH.ticker||localStorage.getItem("mr_last")||"SPY").toUpperCase(); CH.ticker=ticker; try{localStorage.setItem("mr_last",ticker);}catch(e){}
   const recent=JSON.parse(localStorage.getItem("mr_recent")||"[]").filter(x=>x!==ticker); recent.unshift(ticker); try{localStorage.setItem("mr_recent",JSON.stringify(recent.slice(0,10)));}catch(e){}
   const m=$("#main"); const s=st.map[ticker];
   m.innerHTML=`<div class="row" style="margin-bottom:12px">
       <form id="cf" class="row"><input id="cq" placeholder="Ticker or company" value="${esc(ticker)}" style="width:240px" autocomplete="off"><button class="pri">Go</button></form>
       <div class="seg" id="rng">${[["70 bars",70],["6M",126],["1Y",252],["2Y",504],["All",99999]].map(([l,v])=>`<button data-v="${v}" class="${CH.bars===v?"on":""}">${l}</button>`).join("")}</div>
+      <div class="seg"><button id="zin" title="Zoom in">＋</button><button id="zout" title="Zoom out">－</button></div>
       <button id="mbtn" title="Measure a move: click and drag on the chart (or hold Shift and drag anywhere). Esc clears it.">📏 Measure</button>
       ${recent.length>1?`<span class="muted">Recent:</span><div class="chips">${recent.slice(1,9).map(t=>`<span class="chip" data-tk="${esc(t)}">${esc(t)}</span>`).join("")}<span class="chip" id="rclr" title="Clear recent tickers">✕</span></div>`:""}</div>
     <div class="card" style="padding:12px 14px"><div class="info" id="cinfo"></div></div>
-    <div class="card" style="padding:8px"><div id="cv"></div>
-      <div class="note" style="padding:6px 8px 2px">Scroll = zoom · drag = move · drag or scroll on the price axis = zoom prices (any pane) · double-click = reset to 70 candles · 📏 Measure (or Shift): drag, or click the start and click again at the end · Esc clears.<br><span style="color:#26a69a">▲ BUY</span> / <span style="color:#ef5350">▼ SHORT</span> = strategy entry (next open after the EMA trend is set) ·
+    <div class="card" style="padding:8px" id="cvcard"><div class="row" style="padding:2px 4px 8px;gap:8px">
+        <span class="muted">Panels:</span><div class="seg" id="pnl"><button data-p="macd">MACD</button><button data-p="dmi">DMI</button></div>
+        <button id="fsb" style="margin-left:auto">⛶ Full screen</button></div><div id="cv"></div>
+      <div class="note" style="padding:6px 8px 2px">Drag the chart, or swipe/scroll on the date line = move · pinch, ＋/－ or Ctrl/⌘ + scroll = zoom · drag the price axis = zoom prices (any pane) · up/down scroll = scroll the page · double-click = reset to 70 candles · 📏 Measure (or Shift): drag, or click the start and click again at the end · Esc clears.<br><span style="color:#26a69a">▲ BUY</span> / <span style="color:#ef5350">▼ SHORT</span> = strategy entry (next open after the EMA trend is set) ·
       <span class="gold">EXIT</span> = position closed, with its result · <span style="color:#7fc4ff">small ▲ under a candle</span> = close above the previous 20-day high · <span style="color:#ff8a80">small ▼ above a candle</span> = close below the previous 20-day low ·
       green / red shading = EMA uptrend / downtrend (${EMA_TXT})</div></div>
-    <div class="card"><h3>Backtest trades in ${esc(ticker)} <small>click a trade to jump to it on the chart</small></h3><div class="tbl-wrap" id="ctr"><div class="loading">…</div></div></div>`;
+    <div class="card"><h3>Backtest trades in ${esc(ticker)} <small>click a trade to jump to it on the chart</small></h3><div class="tbl-wrap scroll" id="ctr"><div class="loading">…</div></div></div>`;
   attachAC($("#cq"),t=>{ location.hash="#chart/"+encodeURIComponent(t); });
   $("#cf").onsubmit=e=>{e.preventDefault(); const q=$("#cq").value.trim().toUpperCase(); const hit=st.map[q]?q:(searchStocks(q,1)[0]||{}).ticker; location.hash="#chart/"+encodeURIComponent(hit||q);};
   document.querySelectorAll("#rng button").forEach(b=>b.onclick=()=>{CH.bars=+b.dataset.v; document.querySelectorAll("#rng button").forEach(x=>x.classList.toggle("on",x===b)); CH.chart&&CH.chart.setBars(CH.bars);});
@@ -579,19 +626,27 @@ async function viewChart(ticker,focus){
     if(c[i]!=null&&c[i]>hh) markers.push({i,pos:"below",dir:"up",size:4.5,color:"#7fc4ff"});
     let ll=Infinity; for(let k=i-20;k<i;k++) if(l[k]!=null&&l[k]<ll) ll=l[k];                          // close below previous 20-day low
     if(c[i]!=null&&c[i]<ll) markers.push({i,pos:"above",dir:"down",size:4.5,color:"#ff8a80"}); }
-  if(CH.chart) CH.chart.destroy();
-  CH.chart=new RChart($("#cv"),{dates,height:Math.max(580,Math.min(880,window.innerHeight-220)),initial:70,
-    onMeasureEnd:()=>$("#mbtn").classList.remove("pri"),panes:[
-    {w:3.2,title:ticker+" · D",bands,markers,series:[{type:"candle",o,h,l,c,tag:true,tagColor:c.at(-1)>=o.at(-1)?"#26a69a":"#ef5350"},
+  const PANES={price:{w:3.2,title:ticker+" · D",bands,markers,series:[{type:"candle",o,h,l,c,tag:true,tagColor:c.at(-1)>=o.at(-1)?"#26a69a":"#ef5350"},
       ...EP.map((p,k)=>({type:"line",name:"EMA"+p,v:t.e[p],color:EMA_COL[p]||["#00bcd4","#4c9ffe","#f5a623","#ec407a","#c77dff"][k%5],width:1.2+k*.2})),
       {type:"volume",v,o,c,overlay:true,nolegend:true}]},
-    {w:1,title:"MACD 12 26 9",fmt:x=>x.toFixed(Math.abs(x)<1?3:2),refs:[{v:0,inRange:true}],series:[
+    macd:{w:1,title:"MACD 12 26 9",fmt:x=>x.toFixed(Math.abs(x)<1?3:2),refs:[{v:0,inRange:true}],series:[
       {type:"hist",name:"Hist",v:hist,color:(x,i)=>x>=0?(i>0&&hist[i-1]!=null&&x<hist[i-1]?"rgba(38,166,154,.45)":"#26a69a"):(i>0&&hist[i-1]!=null&&x>hist[i-1]?"rgba(239,83,80,.45)":"#ef5350")},
       {type:"line",name:"MACD",v:macd,color:"#4c9ffe"},{type:"line",name:"Signal",v:sigRaw,color:"#f5a623"}]},
-    {w:1,title:"DMI 14",fmt:x=>x.toFixed(1),refs:[{v:20,color:"#3a4654"}],series:[
-      {type:"line",name:"+DI",v:dm.plus,color:"#26a69a"},{type:"line",name:"−DI",v:dm.minus,color:"#ef5350"},{type:"line",name:"ADX",v:dm.adx,color:"#f5c542",width:1.8}]}]});
+    dmi:{w:1,title:"DMI 14",fmt:x=>x.toFixed(1),refs:[{v:20,color:"#3a4654"}],series:[
+      {type:"line",name:"+DI",v:dm.plus,color:"#26a69a"},{type:"line",name:"−DI",v:dm.minus,color:"#ef5350"},{type:"line",name:"ADX",v:dm.adx,color:"#f5c542",width:1.8}]}};
+  const build=()=>{ const keep=CH.chart?{f:CH.chart.from,t:CH.chart.to,m:CH.chart.meas,hl:CH.chart.hl}:null; if(CH.chart) CH.chart.destroy();
+    const H=CH.full?window.innerHeight-70:Math.max(580,Math.min(880,window.innerHeight-220));
+    CH.chart=new RChart($("#cv"),{dates,height:H,initial:70,onMeasureEnd:()=>$("#mbtn").classList.remove("pri"),
+      panes:[PANES.price,...(CH.hide.macd?[]:[PANES.macd]),...(CH.hide.dmi?[]:[PANES.dmi])]});
+    if(keep){ CH.chart.from=keep.f; CH.chart.to=keep.t; CH.chart.meas=keep.m&&keep.m.pi===0?keep.m:null; CH.chart.hl=keep.hl; CH.chart.draw(); }
+    document.querySelectorAll("#pnl button").forEach(x=>x.classList.toggle("on",!CH.hide[x.dataset.p])); };
+  document.querySelectorAll("#pnl button").forEach(x=>x.onclick=()=>{ CH.hide[x.dataset.p]=!CH.hide[x.dataset.p]; try{localStorage.setItem("mr_hide",JSON.stringify(CH.hide));}catch(e){} build(); });
+  $("#fsb").onclick=()=>{ CH.full=!CH.full; $("#cvcard").classList.toggle("full",CH.full); $("#fsb").textContent=CH.full?"✕ Exit full screen":"⛶ Full screen"; build(); };
+  CH.esc=e=>{ if(e.key==="Escape"&&CH.full&&!(CH.chart&&CH.chart.meas)){ $("#fsb").click(); } }; window.removeEventListener("keydown",CH.escOld||(()=>{})); window.addEventListener("keydown",CH.esc); CH.escOld=CH.esc;
+  build();
   if(CH.bars!==70) CH.chart.setBars(CH.bars);
   $("#rclr")&&($("#rclr").onclick=e=>{ e.stopPropagation(); try{localStorage.setItem("mr_recent",JSON.stringify([ticker]));}catch(_){ } viewChart(ticker); });
+  $("#zin").onclick=()=>CH.chart.zoomAt(CH.chart.plotW*.85,1/1.35); $("#zout").onclick=()=>CH.chart.zoomAt(CH.chart.plotW*.85,1.35);
   $("#mbtn").onclick=()=>{ const on=!CH.chart.measureMode; CH.chart.setMeasure(on); $("#mbtn").classList.toggle("pri",on); };
   sortedTable($("#ctr"),trades,CH.ts ||= {k:"entry_date",d:-1},"The strategy has not traded this ticker in the backtest period.");
   if(focus){ const tr=trades.find(r=>r.signal===focus); const si=idx[focus]??idx[tr?.entry_date];
