@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+  :root { --bg:#0f1419; --panel:#171d24; --line:#26303b; --text:#e6e9ee; --muted:#8b96a3;
+          --up:#2fbf71; --down:#ef5350; --accent:#4c9ffe; --improving:#4c9ffe; --leading:#2fbf71;
+          --weakening:#f5a623; --lagging:#ef5350; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; }
+  header { padding:18px 24px 10px; border-bottom:1px solid var(--line); display:flex; flex-wrap:wrap;
+           gap:12px 24px; align-items:center; }
+  h1 { font-size:19px; margin:0; font-weight:650; }
+  .stats { display:flex; gap:18px; flex-wrap:wrap; color:var(--muted); font-size:13px; }
+  .stats b { color:var(--text); font-weight:600; }
+  select, input { background:var(--panel); color:var(--text); border:1px solid var(--line);
+                  border-radius:6px; padding:6px 9px; font:inherit; }
+  nav { display:flex; gap:4px; padding:10px 24px 0; flex-wrap:wrap; border-bottom:1px solid var(--line); }
+  nav button { background:none; border:none; color:var(--muted); font:inherit; padding:9px 14px;
+               cursor:pointer; border-bottom:2px solid transparent; }
+  nav button.on { color:var(--text); border-bottom-color:var(--accent); }
+  nav .n { background:var(--panel); border-radius:9px; padding:1px 7px; margin-left:6px; font-size:12px; }
+  main { padding:16px 24px 40px; }
+  .tools { display:flex; gap:12px; align-items:center; margin-bottom:12px; color:var(--muted); font-size:13px; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; font-weight:600; color:var(--muted); font-size:12px; padding:8px 10px;
+       border-bottom:1px solid var(--line); cursor:pointer; user-select:none; white-space:nowrap;
+       position:sticky; top:0; background:var(--bg); }
+  th:hover { color:var(--text); }
+  td { padding:7px 10px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  td.name { color:var(--muted); max-width:260px; overflow:hidden; text-overflow:ellipsis; }
+  tr:hover td { background:var(--panel); }
+  a { color:var(--accent); text-decoration:none; font-weight:600; }
+  .up { color:var(--up); } .down { color:var(--down); }
+  .star { color:#f5c542; }
+  .q { font-weight:600; }
+  .Leading { color:var(--leading); } .Improving { color:var(--improving); }
+  .Weakening { color:var(--weakening); } .Lagging { color:var(--lagging); }
+  .grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(320px,520px); gap:24px; }
+  @media (max-width:1000px) { .grid { grid-template-columns:1fr; } }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .card h3 { margin:0 0 8px; font-size:14px; }
+  .note { color:var(--muted); font-size:12px; margin-top:10px; }
+  .empty { color:var(--muted); padding:30px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>__TITLE__</h1>
+  <select id="date"></select>
+  <div class="stats" id="stats"></div>
+</header>
+<nav id="tabs"></nav>
+<main id="main"></main>
+
+<script>
+const LATEST = __LATEST__;
+const DATES = __DATES__;
+let data = LATEST, tab = "breakouts", sortKey = null, sortDir = -1, query = "";
+
+const TABS = [
+  ["breakouts", "Trend + Breakout"],
+  ["rs_days", "Up while SPY down"],
+  ["rs_leaders", "RS Leaders"],
+  ["trend", "EMA Trend"],
+  ["rotation", "Sector Rotation"],
+];
+const COLS = [
+  ["ticker","Ticker"],["name","Name"],["close","Close"],["chg","Chg %"],["rs","RS"],
+  ["vol_ratio","Vol x"],["days_trend","Days in trend"],["ext_ema20","% from EMA20"],["perf_1m","1M %"],
+];
+const cls = v => v == null ? "" : v > 0 ? "up" : v < 0 ? "down" : "";
+const pct = v => v == null ? "–" : (v > 0 ? "+" : "") + v.toFixed(2) + "%";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function header() {
+  const b = data.benchmark, br = data.breadth;
+  document.getElementById("stats").innerHTML =
+    `<span>${b.ticker} <b>${b.close}</b> <span class="${cls(b.chg)}">${pct(b.chg)}</span></span>
+     <span>Scanned <b>${data.universe_size}</b></span>
+     <span>In EMA trend <b>${br.pct_in_trend}%</b></span>
+     <span>Above 200 EMA <b>${br.pct_above_ema200}%</b></span>
+     <span>New in trend today <b>${br.new_trend_today}</b></span>`;
+  document.getElementById("tabs").innerHTML = TABS.map(([k, label]) => {
+    const n = k === "rotation" ? "" : `<span class="n">${data[k].length}</span>`;
+    return `<button class="${k === tab ? "on" : ""}" onclick="setTab('${k}')">${label}${n}</button>`;
+  }).join("");
+}
+
+function setTab(k) { tab = k; sortKey = null; render(); }
+function sortBy(k) { sortDir = sortKey === k ? -sortDir : -1; sortKey = k; render(); }
+
+function stockTable(rows) {
+  if (tab === "rs_days" && data.benchmark.chg >= 0)
+    return `<div class="empty">${data.benchmark.ticker} was not down on ${data.date}, so there is no "up while SPY down" list.</div>`;
+  const q = query.toUpperCase();
+  rows = rows.filter(r => !q || r.ticker.includes(q) || (r.name || "").toUpperCase().includes(q));
+  if (sortKey) rows = [...rows].sort((a, b) => {
+    const x = a[sortKey], y = b[sortKey];
+    if (x == null) return 1; if (y == null) return -1;
+    return (x > y ? 1 : x < y ? -1 : 0) * sortDir;
+  });
+  if (!rows.length) return `<div class="empty">No stocks match.</div>`;
+  return `<table><thead><tr>${COLS.map(([k, l]) =>
+      `<th onclick="sortBy('${k}')">${l}${sortKey === k ? (sortDir > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}</tr></thead><tbody>` +
+    rows.map(r => `<tr>
+      <td><a href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.ticker)}" target="_blank">${esc(r.ticker)}</a>${r.rs_high ? ' <span class="star" title="RS line at 50-day high">★</span>' : ""}</td>
+      <td class="name">${esc(r.name)}</td><td>${r.close}</td>
+      <td class="${cls(r.chg)}">${pct(r.chg)}</td><td>${r.rs ?? "–"}</td>
+      <td>${r.vol_ratio ?? "–"}</td><td>${r.days_trend}</td>
+      <td>${r.ext_ema20 == null ? "–" : r.ext_ema20 + "%"}</td>
+      <td class="${cls(r.perf_1m)}">${r.perf_1m == null ? "–" : pct(r.perf_1m)}</td></tr>`).join("") +
+    `</tbody></table>`;
+}
+
+function rotTable(rows, title) {
+  return `<div class="card"><h3>${title}</h3><table><thead><tr>
+    <th>#</th><th>ETF</th><th>Name</th><th>vs SPY 1W</th><th>1M</th><th>3M</th><th>Quadrant</th><th>Rank move</th>
+    </tr></thead><tbody>` + rows.map(r => `<tr><td>${r.rank}</td>
+      <td><a href="https://www.tradingview.com/chart/?symbol=${r.ticker}" target="_blank">${r.ticker}</a></td>
+      <td class="name">${esc(r.name)}</td>
+      <td class="${cls(r.rel_1w)}">${pct(r.rel_1w)}</td><td class="${cls(r.rel_1m)}">${pct(r.rel_1m)}</td>
+      <td class="${cls(r.rel_3m)}">${pct(r.rel_3m)}</td><td class="q ${r.quadrant}">${r.quadrant}</td>
+      <td class="${cls(r.rank_change)}">${r.rank_change > 0 ? "▲" + r.rank_change : r.rank_change < 0 ? "▼" + (-r.rank_change) : "–"}</td>
+    </tr>`).join("") + `</tbody></table></div>`;
+}
+
+function rrg(rows) {
+  // Relative Rotation Graph: x = RS-Ratio (trend vs SPY), y = RS-Momentum (is it improving?)
+  const W = 500, H = 440, P = 36;
+  const pts = rows.flatMap(r => [...r.tail, {x: r.rs_ratio, y: r.rs_mom}]).filter(p => p.x != null && p.y != null);
+  const span = (k) => Math.max(1.5, ...pts.map(p => Math.abs(p[k] - 100))) * 1.15;
+  const sx = span("x"), sy = span("y");
+  const X = v => P + (v - (100 - sx)) / (2 * sx) * (W - 2 * P);
+  const Y = v => H - P - (v - (100 - sy)) / (2 * sy) * (H - 2 * P);
+  const color = q => getComputedStyle(document.body).getPropertyValue("--" + q.toLowerCase());
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">
+    <rect x="${X(100)}" y="${P}" width="${W - P - X(100)}" height="${Y(100) - P}" fill="#2fbf7112"/>
+    <rect x="${P}" y="${P}" width="${X(100) - P}" height="${Y(100) - P}" fill="#4c9ffe12"/>
+    <rect x="${P}" y="${Y(100)}" width="${X(100) - P}" height="${H - P - Y(100)}" fill="#ef535012"/>
+    <rect x="${X(100)}" y="${Y(100)}" width="${W - P - X(100)}" height="${H - P - Y(100)}" fill="#f5a62312"/>
+    <line x1="${X(100)}" x2="${X(100)}" y1="${P}" y2="${H - P}" stroke="#3a4654"/>
+    <line y1="${Y(100)}" y2="${Y(100)}" x1="${P}" x2="${W - P}" stroke="#3a4654"/>
+    <g font-size="11" fill="#8b96a3">
+      <text x="${W - P - 4}" y="${P + 14}" text-anchor="end">LEADING</text>
+      <text x="${P + 4}" y="${P + 14}">IMPROVING</text>
+      <text x="${P + 4}" y="${H - P - 6}">LAGGING</text>
+      <text x="${W - P - 4}" y="${H - P - 6}" text-anchor="end">WEAKENING</text>
+      <text x="${W / 2}" y="${H - 8}" text-anchor="middle">RS-Ratio (strength vs SPY) →</text>
+      <text x="12" y="${H / 2}" transform="rotate(-90 12 ${H / 2})" text-anchor="middle">RS-Momentum →</text>
+    </g>`;
+  for (const r of rows) {
+    const c = color(r.quadrant), tail = [...r.tail, {x: r.rs_ratio, y: r.rs_mom}].filter(p => p.x != null);
+    s += `<polyline fill="none" stroke="${c}" stroke-opacity=".45" stroke-width="1.5" points="${tail.map(p => X(p.x) + "," + Y(p.y)).join(" ")}"/>`;
+    tail.slice(0, -1).forEach(p => s += `<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="2" fill="${c}" fill-opacity=".5"/>`);
+    s += `<circle cx="${X(r.rs_ratio)}" cy="${Y(r.rs_mom)}" r="5" fill="${c}"><title>${r.ticker} ${r.name}: ${r.quadrant}</title></circle>
+          <text x="${X(r.rs_ratio) + 7}" y="${Y(r.rs_mom) + 4}" font-size="11" fill="#e6e9ee">${r.ticker}</text>`;
+  }
+  return s + "</svg>";
+}
+
+function render() {
+  header();
+  const m = document.getElementById("main");
+  if (tab === "rotation") {
+    const all = [...data.sectors, ...data.industries];
+    const inn = all.filter(r => r.quadrant === "Improving").map(r => `<b>${r.ticker}</b> ${esc(r.name)}`);
+    m.innerHTML = `<p>Rotating in (Improving): ${inn.length ? inn.join(", ") : "none"}.</p>
+      <div class="grid"><div>${rotTable(data.sectors, "Sectors")}<div style="height:16px"></div>${rotTable(data.industries, "Industry groups")}</div>
+      <div class="card"><h3>Rotation map — sectors (last ~5 weeks)</h3>${rrg(data.sectors)}
+      <p class="note">Money typically rotates clockwise: Improving → Leading → Weakening → Lagging.
+      Sectors moving from Improving into Leading are where strength is building.</p></div></div>`;
+    return;
+  }
+  m.innerHTML = `<div class="tools"><input id="q" placeholder="Search ticker or name" value="${esc(query)}">
+     <span>Click a column to sort · ★ = RS line at 50-day high · click a ticker for its chart</span></div>` + stockTable(data[tab]);
+  const q = document.getElementById("q");
+  q.oninput = () => { query = q.value; const pos = q.selectionStart; render(); const n = document.getElementById("q"); n.focus(); n.setSelectionRange(pos, pos); };
+}
+
+const sel = document.getElementById("date");
+sel.innerHTML = DATES.map(d => `<option>${d}</option>`).join("");
+sel.value = data.date;
+sel.onchange = async () => {
+  if (sel.value === LATEST.date) { data = LATEST; return render(); }
+  try { data = await (await fetch(`data/${sel.value}.json`)).json(); render(); }
+  catch (e) { alert("Could not load " + sel.value); }
+};
+render();
+</script>
+</body>
+</html>

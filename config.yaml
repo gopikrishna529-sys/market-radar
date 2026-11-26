@@ -1,0 +1,64 @@
+# ------------------------------------------------------------
+# Stock Scanner settings - edit these values, then commit.
+# ------------------------------------------------------------
+
+# Massive API (free tier = 5 requests/minute)
+api:
+  base_url: "https://api.massive.com"
+  requests_per_minute: 5
+
+# Which stocks to scan
+universe:
+  ticker_types: ["CS", "ADRC"]   # CS = common stock, ADRC = ADRs. ETFs are excluded.
+  min_price: 5.0                 # ignore stocks below $5
+  min_avg_volume: 500000         # 50-day average daily volume
+  min_history_days: 210          # need enough bars for the 200 EMA
+
+# EMA trend rule:  Close > EMA fast > EMA mid > EMA slow, and the fast + mid EMAs rising
+ema:
+  fast: 20
+  mid: 50
+  slow: 200
+  rising_lookback: 5             # "rising" = higher than N days ago
+
+# Breakout rule: EMA trend AND close above the highest high of the previous N days
+breakout:
+  lookback_days: 20
+
+# Relative strength
+relative_strength:
+  benchmark: "SPY"               # SPY is used as the S&P 500 (SPX) proxy
+  rs_day_min_gain_pct: 0.0       # "SPY down, stock up": stock must gain more than this %
+  leaders_min_rating: 80         # RS rating (1-99) needed for the RS Leaders list
+
+# Sector rotation: sector ETFs compared with the benchmark
+sectors:
+  XLK: Technology
+  XLF: Financials
+  XLV: Health Care
+  XLY: Consumer Discretionary
+  XLP: Consumer Staples
+  XLE: Energy
+  XLI: Industrials
+  XLB: Materials
+  XLU: Utilities
+  XLRE: Real Estate
+  XLC: Communication Services
+
+# Narrower industry groups (also shown in the rotation table)
+industries:
+  SMH: Semiconductors
+  IGV: Software
+  XBI: Biotech
+  KRE: Regional Banks
+  ITB: Homebuilders
+  XRT: Retail
+  XOP: Oil & Gas Exploration
+  GDX: Gold Miners
+  ITA: Aerospace & Defense
+  JETS: Airlines
+
+# Report
+report:
+  max_rows_email: 40             # rows per list in the email (website shows all)
+  site_title: "Market Radar"
