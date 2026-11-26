@@ -117,61 +117,81 @@ document.addEventListener("click", e => {
 /* ------------------------------------------------------------------ chart engine (canvas, TradingView-style) */
 function niceStep(raw){ const p=Math.pow(10,Math.floor(Math.log10(raw))); const f=raw/p; return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*p; }
 class RChart{
+  /* Canvas chart. Mouse: drag = pan (also vertically once a pane is scaled) · wheel = zoom time ·
+     drag or wheel on the price axis = zoom that pane vertically · double-click plot = reset view ·
+     double-click axis = auto-scale that pane · Shift+drag or the Measure button = measure a move · Esc = clear */
   constructor(el, cfg){
     this.el=el; this.cfg=cfg; this.n=cfg.dates.length; el.innerHTML=""; el.classList.add("rchart");
     el.style.height=(cfg.height||500)+"px";
     this.cv=document.createElement("canvas"); el.appendChild(this.cv); this.ctx=this.cv.getContext("2d");
-    this.reset(cfg.initial||250); this.hover=null; this.my=null;
-    const c=this.cv;
-    c.addEventListener("wheel",e=>{e.preventDefault(); const r=c.getBoundingClientRect(); const a=this.iOf(e.clientX-r.left);
-      const f=e.deltaY>0?1.12:1/1.12; let span=(this.to-this.from)*f; span=Math.max(15,Math.min(this.n+40,span));
+    this.ys=cfg.panes.map(()=>({s:1,o:0})); this.measureMode=false; this.meas=null;
+    this.reset(cfg.initial||70); this.hover=null; this.my=null;
+    const c=this.cv, pos=e=>{const r=c.getBoundingClientRect(); return [e.clientX-r.left,e.clientY-r.top];};
+    c.addEventListener("wheel",e=>{e.preventDefault(); const [x,y]=pos(e); const f=e.deltaY>0?1.12:1/1.12; const pi=this.paneAt(y);
+      if(x>this.plotW&&pi!=null){ this.ys[pi].s=Math.max(.05,Math.min(40,this.ys[pi].s*f)); this.draw(); return; }
+      const a=this.iOf(x); let span=(this.to-this.from)*f; span=Math.max(10,Math.min(this.n+40,span));
       this.from=a-(a-this.from)*span/(this.to-this.from); this.to=this.from+span; this.clamp(); this.draw();},{passive:false});
-    c.addEventListener("pointerdown",e=>{this.drag={x:e.clientX,f:this.from,t:this.to}; c.setPointerCapture(e.pointerId);});
-    c.addEventListener("pointermove",e=>{const r=c.getBoundingClientRect(); const x=e.clientX-r.left;
-      if(this.drag){const d=(e.clientX-this.drag.x)/this.plotW*(this.drag.t-this.drag.f); this.from=this.drag.f-d; this.to=this.drag.t-d; this.clamp();}
-      this.hover=Math.round(this.iOf(Math.min(x,this.plotW))); this.my=e.clientY-r.top; this.draw(); cfg.onHover&&cfg.onHover(this.hidx());});
-    c.addEventListener("pointerup",()=>{this.drag=null;});
-    c.addEventListener("pointerleave",()=>{this.hover=null;this.my=null;this.drag=null;this.draw();cfg.onHover&&cfg.onHover(this.hidx());});
-    c.addEventListener("dblclick",()=>{this.reset(cfg.initial||250);this.draw();});
+    c.addEventListener("pointerdown",e=>{ const [x,y]=pos(e); const pi=this.paneAt(y); c.setPointerCapture(e.pointerId);
+      if(x>this.plotW&&pi!=null){ this.axisDrag={pi,y,s0:this.ys[pi].s}; return; }
+      if((this.measureMode||e.shiftKey)&&pi!=null){ const i=Math.round(this.iOf(x)), v=this.valAt(pi,y); this.meas={pi,i0:i,v0:v,i1:i,v1:v,live:true}; this.draw(); return; }
+      if(this.meas&&!this.meas.live) this.meas=null;
+      this.drag={x,y,f:this.from,t:this.to,pi,o0:pi!=null?this.ys[pi].o:0}; });
+    c.addEventListener("pointermove",e=>{ const [x,y]=pos(e);
+      c.style.cursor=x>this.plotW?"ns-resize":(this.measureMode||e.shiftKey)?"crosshair":this.drag?"grabbing":"crosshair";
+      if(this.axisDrag){ const A=this.axisDrag; this.ys[A.pi].s=Math.max(.05,Math.min(40,A.s0*Math.exp((y-A.y)*.006))); this.draw(); return; }
+      if(this.meas&&this.meas.live){ this.meas.i1=Math.round(this.iOf(Math.min(x,this.plotW))); this.meas.v1=this.valAt(this.meas.pi,y); }
+      else if(this.drag){ const D=this.drag, d=(x-D.x)/this.plotW*(D.t-D.f); this.from=D.f-d; this.to=D.t-d; this.clamp();
+        const Y=this.ys[D.pi]; const g=this.paneGeo&&this.paneGeo[D.pi];
+        if(Y&&g&&(Y.s!==1||Y.o!==0)) Y.o=D.o0+(y-D.y)/(g.bot-g.top)*Y.s; }
+      this.hover=Math.round(this.iOf(Math.min(x,this.plotW))); this.my=y; this.draw(); this.cfg.onHover&&this.cfg.onHover(this.hidx()); });
+    const up=()=>{ this.drag=null; this.axisDrag=null; if(this.meas&&this.meas.live){ this.meas.live=false; if(this.meas.i0===this.meas.i1&&this.meas.v0===this.meas.v1) this.meas=null;
+        if(this.measureMode){ this.measureMode=false; this.cfg.onMeasureEnd&&this.cfg.onMeasureEnd(); } this.draw(); } };
+    c.addEventListener("pointerup",up); c.addEventListener("pointercancel",up);
+    c.addEventListener("pointerleave",()=>{ if(this.drag||this.axisDrag||(this.meas&&this.meas.live)) return; this.hover=null; this.my=null; this.draw(); this.cfg.onHover&&this.cfg.onHover(null); });
+    c.addEventListener("dblclick",e=>{ const [x,y]=pos(e); const pi=this.paneAt(y);
+      if(x>this.plotW&&pi!=null){ this.ys[pi]={s:1,o:0}; } else { this.reset(this.cfg.initial||70); this.ys=this.cfg.panes.map(()=>({s:1,o:0})); this.meas=null; } this.draw(); });
+    this.onKey=e=>{ if(e.key==="Escape"&&this.meas){ this.meas=null; this.draw(); } }; window.addEventListener("keydown",this.onKey);
     this.ro=new ResizeObserver(()=>this.resize()); this.ro.observe(el);
   }
+  destroy(){ this.ro.disconnect(); window.removeEventListener("keydown",this.onKey); }
   reset(count){ this.to=this.n-1+3; this.from=this.to-Math.min(count,this.n+3); }
   setBars(count){ this.reset(count); this.draw(); }
+  setMeasure(on){ this.measureMode=on; }
   highlight(a,b){ this.hl=[a,b]; this.draw(); }
   centerOn(i,span){ span=span||(this.to-this.from); this.from=i-span/2; this.to=i+span/2; this.clamp(); this.draw(); }
   clamp(){ const span=this.to-this.from; if(this.to>this.n-1+30){this.to=this.n-1+30;this.from=this.to-span;} if(this.from<-30){this.from=-30;this.to=this.from+span;} }
   hidx(){ return this.hover==null?null:Math.max(0,Math.min(this.n-1,this.hover)); }
   iOf(x){ return this.from+x/this.plotW*(this.to-this.from); }
   xOf(i){ return (i-this.from)/(this.to-this.from)*this.plotW; }
+  paneAt(y){ if(!this.paneGeo) return null; const k=this.paneGeo.findIndex(p=>y>=p.y0&&y<p.y0+p.ph); return k<0?null:k; }
+  valAt(pi,y){ const p=this.paneGeo[pi]; return p.mn+(p.bot-y)/(p.bot-p.top)*(p.mx-p.mn); }
   resize(){ const w=this.el.clientWidth; if(!w) return; const h=this.cfg.height||500, d=window.devicePixelRatio||1;
     this.W=w; this.H=h; this.cv.width=w*d; this.cv.height=h*d; this.cv.style.width=w+"px"; this.cv.style.height=h+"px"; this.ctx.setTransform(d,0,0,d,0,0); this.draw(); }
   draw(){
     const g=this.ctx, W=this.W, H=this.H; if(!W) return;
-    const axisW=72, dateH=24; this.plotW=W-axisW; const plotW=this.plotW;
+    const axisW=82, dateH=28; this.plotW=W-axisW; const plotW=this.plotW;
+    const F="-apple-system,BlinkMacSystemFont,Segoe UI,Arial";
     g.clearRect(0,0,W,H); g.fillStyle="#0b0f14"; g.fillRect(0,0,W,H);
     const panes=this.cfg.panes, tw=panes.reduce((s,p)=>s+(p.w||1),0); let y0=0; const avail=H-dateH;
     const i0=Math.max(0,Math.floor(this.from)), i1=Math.min(this.n-1,Math.ceil(this.to));
     const bw=plotW/(this.to-this.from); const hi=this.hidx(); const li=hi??(this.n-1);
-    g.font="11px -apple-system,Segoe UI,Arial"; g.textBaseline="middle";
-    this.paneGeo=[];
-    for(const p of panes){
-      const ph=avail*(p.w||1)/tw, top=y0+22, bot=y0+ph-6; let mn=Infinity,mx=-Infinity;
+    g.textBaseline="middle"; this.paneGeo=[];
+    panes.forEach((p,pi)=>{
+      const ph=avail*(p.w||1)/tw, top=y0+24, bot=y0+ph-8; let mn=Infinity,mx=-Infinity;
       for(const s of p.series){ if(s.overlay) continue;
         for(let i=i0;i<=i1;i++){ if(s.type==="candle"){const lo=s.l[i],h2=s.h[i]; if(lo!=null&&h2!=null){mn=Math.min(mn,lo);mx=Math.max(mx,h2);}} else {const v=s.v[i]; if(v!=null&&isFinite(v)){mn=Math.min(mn,v);mx=Math.max(mx,v);}} }
         if(s.type==="hist"){mn=Math.min(mn,0);mx=Math.max(mx,0);} }
       for(const r of (p.refs||[])) if(r.inRange){mn=Math.min(mn,r.v);mx=Math.max(mx,r.v);}
       if(!isFinite(mn)){mn=0;mx=1;} if(mx===mn){mx+=1;mn-=1;} const pad=(mx-mn)*0.06; mn-=pad; mx+=pad;
+      const sc=this.ys[pi]; if(sc.s!==1||sc.o!==0){ const rng=mx-mn, mid=(mn+mx)/2+sc.o*rng, half=rng/2*sc.s; mn=mid-half; mx=mid+half; }
       const Y=v=>bot-(v-mn)/(mx-mn)*(bot-top); const fmt=p.fmt||fmtPx;
       this.paneGeo.push({y0,ph,Y,mn,mx,top,bot,fmt});
-      // highlighted trade
-      if(this.hl&&p===panes[0]){ const xa=this.xOf(this.hl[0]-.5), xb=this.xOf(this.hl[1]+.5); g.fillStyle="rgba(76,159,254,.13)"; g.fillRect(xa,0,xb-xa,avail);
+      if(this.hl&&pi===0){ const xa=this.xOf(this.hl[0]-.5), xb=this.xOf(this.hl[1]+.5); g.fillStyle="rgba(76,159,254,.13)"; g.fillRect(xa,0,xb-xa,avail);
         g.strokeStyle="rgba(76,159,254,.8)"; g.setLineDash([5,4]); g.beginPath(); g.moveTo(Math.round(this.xOf(this.hl[0]))+.5,0); g.lineTo(Math.round(this.xOf(this.hl[0]))+.5,avail); g.stroke(); g.setLineDash([]); }
-      // bands
       for(const b of (p.bands||[])){ if(b[1]<i0||b[0]>i1) continue; const xa=this.xOf(b[0]-.5), xb=this.xOf(b[1]+.5); g.fillStyle=b[2]; g.fillRect(Math.max(0,xa),y0,Math.min(plotW,xb)-Math.max(0,xa),ph); }
-      // grid + axis labels
-      const st=niceStep((mx-mn)/Math.max(2,Math.floor((bot-top)/48)));
-      g.strokeStyle="#18212b"; g.lineWidth=1; g.fillStyle="#7d8a99"; g.textAlign="left";
-      for(let v=Math.ceil(mn/st)*st; v<=mx; v+=st){ const y=Math.round(Y(v))+.5; g.beginPath(); g.moveTo(0,y); g.lineTo(plotW,y); g.stroke(); g.fillText(fmt(v),plotW+8,y); }
+      const st=niceStep((mx-mn)/Math.max(2,Math.floor((bot-top)/52)));
+      g.strokeStyle="#18212b"; g.lineWidth=1; g.fillStyle="#9aa6b4"; g.textAlign="left"; g.font=`13px ${F}`;
+      for(let v=Math.ceil(mn/st)*st; v<=mx; v+=st){ const y=Math.round(Y(v))+.5; if(y<y0+4||y>y0+ph-4) continue; g.beginPath(); g.moveTo(0,y); g.lineTo(plotW,y); g.stroke(); g.fillText(fmt(v),plotW+9,y); }
       for(const r of (p.refs||[])){ const y=Math.round(Y(r.v))+.5; g.setLineDash([4,4]); g.strokeStyle=r.color||"#3a4654"; g.beginPath(); g.moveTo(0,y); g.lineTo(plotW,y); g.stroke(); g.setLineDash([]); }
       g.save(); g.beginPath(); g.rect(0,y0,plotW,ph); g.clip();
       for(const s of p.series){
@@ -180,7 +200,7 @@ class RChart{
             g.strokeStyle=g.fillStyle=upb?"#26a69a":"#ef5350"; g.beginPath(); g.moveTo(Math.round(x)+.5,Y(h2)); g.lineTo(Math.round(x)+.5,Y(lo)); g.stroke();
             const yo=Y(o), yc=Y(c); g.fillRect(x-w/2,Math.min(yo,yc),w,Math.max(1,Math.abs(yc-yo))); } }
         else if(s.type==="volume"){ let vm=0; for(let i=i0;i<=i1;i++) if(s.v[i]>vm) vm=s.v[i]; const hh=(bot-top)*.18, w=Math.max(1,bw*.68);
-          for(let i=i0;i<=i1;i++){ const v=s.v[i]; if(!v) continue; g.fillStyle=(s.c[i]>=s.o[i])?"rgba(38,166,154,.28)":"rgba(239,83,80,.28)"; const h2=v/vm*hh; g.fillRect(this.xOf(i)-w/2,bot-h2,w,h2); } }
+          for(let i=i0;i<=i1;i++){ const v=s.v[i]; if(!v) continue; g.fillStyle=(s.c[i]>=s.o[i])?"rgba(38,166,154,.28)":"rgba(239,83,80,.28)"; const h2=v/vm*hh; g.fillRect(this.xOf(i)-w/2,y0+ph-h2,w,h2); } }
         else if(s.type==="hist"){ const w=Math.max(1,bw*.6), z=Y(0);
           for(let i=i0;i<=i1;i++){ const v=s.v[i]; if(v==null) continue; g.fillStyle=s.color(v,i); const y=Y(v); g.fillRect(this.xOf(i)-w/2,Math.min(y,z),w,Math.max(1,Math.abs(z-y))); } }
         else { g.strokeStyle=s.color; g.lineWidth=s.width||1.5; g.beginPath(); let pen=false, first=null, last=null;
@@ -188,42 +208,49 @@ class RChart{
           g.stroke(); g.lineWidth=1;
           if(s.type==="area"&&first!=null){ g.lineTo(last,Y(s.base??0)); g.lineTo(first,Y(s.base??0)); g.closePath(); g.fillStyle=s.fill; g.fill(); } }
       }
-      // markers (stacked when several share a candle)
       const used={};
       for(const m of (p.markers||[])){ if(m.i<i0||m.i>i1) continue; const x=this.xOf(m.i); const s=p.series[0]; const below=m.pos==="below";
-        const z=m.size||8, key=m.i+(below?"b":"a"), off=used[key]||0; used[key]=off+z*2+(m.text?14:2);
-        const yb=below?Y(s.l[m.i])+6+off:Y(s.h[m.i])-6-off; const up=m.dir?m.dir==="up":below;
+        const z=m.size||8, key=m.i+(below?"b":"a"), off=used[key]||0; used[key]=off+z*1.6+(m.text?18:4);
+        const yb=below?Y(s.l[m.i])+6+off:Y(s.h[m.i])-6-off; const upd=m.dir?m.dir==="up":below;
         g.fillStyle=m.color; g.beginPath();
-        if(up){ const t=below?yb:yb-z*1.6; g.moveTo(x,t); g.lineTo(x-z,t+z*1.6); g.lineTo(x+z,t+z*1.6); }
+        if(upd){ const t=below?yb:yb-z*1.6; g.moveTo(x,t); g.lineTo(x-z,t+z*1.6); g.lineTo(x+z,t+z*1.6); }
         else { const t=below?yb+z*1.6:yb; g.moveTo(x,t); g.lineTo(x-z,t-z*1.6); g.lineTo(x+z,t-z*1.6); }
         g.closePath(); g.fill(); if(m.stroke){ g.strokeStyle="#0b0f14"; g.lineWidth=1; g.stroke(); }
-        if(m.text){ g.font="700 11px -apple-system,Segoe UI,Arial"; g.textAlign="center"; const ty=below?yb+z*1.6+9:yb-z*1.6-8;
-          const tw3=g.measureText(m.text).width+8; g.fillStyle="rgba(11,15,20,.8)"; g.fillRect(x-tw3/2,ty-7,tw3,14); g.fillStyle=m.color; g.fillText(m.text,x,ty); g.font="11px -apple-system,Segoe UI,Arial"; } }
+        if(m.text){ g.font=`700 11.5px ${F}`; g.textAlign="center"; const ty=below?yb+z*1.6+10:yb-z*1.6-9;
+          const tw3=g.measureText(m.text).width+10; g.fillStyle="rgba(11,15,20,.85)"; g.fillRect(x-tw3/2,ty-8,tw3,16); g.fillStyle=m.color; g.fillText(m.text,x,ty); } }
+      // measurement
+      const M=this.meas; if(M&&M.pi===pi){ const xa=this.xOf(M.i0), xb=this.xOf(M.i1), ya=Y(M.v0), yb2=Y(M.v1), upm=M.v1>=M.v0, col=upm?"76,159,254":"239,83,80";
+        g.fillStyle=`rgba(${col},.16)`; g.fillRect(Math.min(xa,xb),Math.min(ya,yb2),Math.abs(xb-xa),Math.abs(yb2-ya));
+        g.strokeStyle=`rgb(${col})`; g.lineWidth=1.5; g.beginPath(); g.moveTo((xa+xb)/2,ya); g.lineTo((xa+xb)/2,yb2); g.moveTo(xa,(ya+yb2)/2); g.lineTo(xb,(ya+yb2)/2); g.stroke(); g.lineWidth=1;
+        const d=this.cfg.dates, ia=Math.max(0,Math.min(this.n-1,M.i0)), ib=Math.max(0,Math.min(this.n-1,M.i1));
+        const days=Math.round((new Date(d[ib])-new Date(d[ia]))/864e5), bars=M.i1-M.i0, diff=M.v1-M.v0, pc=M.v0?diff/Math.abs(M.v0)*100:0;
+        const lines=[`${diff>=0?"+":""}${fmt(diff)}  (${pc>=0?"+":""}${pc.toFixed(2)}%)`,`${bars} bars · ${days} days`,`${fd(d[ia])} → ${fd(d[ib])}`];
+        g.font=`600 12.5px ${F}`; const bw2=Math.max(...lines.map(t=>g.measureText(t).width))+18, bh=62;
+        let bx=(xa+xb)/2-bw2/2, by=upm?Math.min(ya,yb2)-bh-6:Math.max(ya,yb2)+6; bx=Math.max(4,Math.min(plotW-bw2-4,bx)); by=Math.max(y0+2,Math.min(y0+ph-bh-2,by));
+        g.fillStyle=`rgba(${col},.92)`; g.fillRect(bx,by,bw2,bh); g.fillStyle="#fff"; g.textAlign="center"; lines.forEach((t,k)=>g.fillText(t,bx+bw2/2,by+13+k*18)); }
       g.restore();
-      // last-value tags
       for(const s of p.series){ if(!s.tag) continue; let v=null; for(let i=this.n-1;i>=0;i--){ const x=s.type==="candle"?s.c[i]:s.v[i]; if(x!=null){v=x;break;} } if(v==null) continue;
-        const y=Math.max(top,Math.min(bot,Y(v))); g.fillStyle=s.tagColor||s.color||"#26a69a"; g.fillRect(plotW+1,y-9,axisW-2,18); g.fillStyle="#fff"; g.textAlign="left"; g.fillText(fmt(v),plotW+8,y); }
-      // legend
-      let lx=8; g.textAlign="left"; g.font="600 12px -apple-system,Segoe UI,Arial";
-      if(p.title){ g.fillStyle="#e7ebf0"; g.fillText(p.title,lx,y0+11); lx+=g.measureText(p.title).width+12; }
-      g.font="11.5px -apple-system,Segoe UI,Arial";
+        const y=Math.max(top,Math.min(bot,Y(v))); g.fillStyle=s.tagColor||s.color||"#26a69a"; g.fillRect(plotW+1,y-11,axisW-2,22); g.fillStyle="#fff"; g.textAlign="left"; g.font=`600 13px ${F}`; g.fillText(fmt(v),plotW+9,y); }
+      let lx=8; g.textAlign="left"; g.font=`600 12.5px ${F}`;
+      if(p.title){ g.fillStyle="#e7ebf0"; g.fillText(p.title,lx,y0+12); lx+=g.measureText(p.title).width+12; }
+      g.font=`12px ${F}`;
       for(const s of p.series){ if(s.nolegend) continue; let txt;
-        if(s.type==="candle"){ const o=s.o[li],h2=s.h[li],lo=s.l[li],c=s.c[li]; if(c==null) continue; const pc=li>0?s.c[li-1]:null; const ch=pc?(c/pc-1)*100:null;
+        if(s.type==="candle"){ const o=s.o[li],h2=s.h[li],lo=s.l[li],c=s.c[li]; if(c==null) continue; const pcl=li>0?s.c[li-1]:null; const ch=pcl?(c/pcl-1)*100:null;
           txt=`O ${fmtPx(o)}  H ${fmtPx(h2)}  L ${fmtPx(lo)}  C ${fmtPx(c)}  ${ch==null?"":(ch>=0?"+":"")+ch.toFixed(2)+"%"}`; g.fillStyle=c>=o?"#26a69a":"#ef5350"; }
-        else { const v=s.v[li]; txt=`${s.name} ${v==null?"–":fmt(v)}`; g.fillStyle=s.color||"#ccc"; if(s.type==="hist") g.fillStyle="#8794a3"; }
-        g.fillText(txt,lx,y0+11); lx+=g.measureText(txt).width+14; }
+        else { const v=s.v[li]; txt=`${s.name} ${v==null?"–":fmt(v)}`; g.fillStyle=s.type==="hist"?"#8794a3":(s.color||"#ccc"); }
+        g.fillText(txt,lx,y0+12); lx+=g.measureText(txt).width+14; }
+      if(sc.s!==1||sc.o!==0){ g.fillStyle="#4c9ffe"; g.font=`11px ${F}`; g.textAlign="right"; g.fillText("manual scale · double-click axis = auto",plotW-6,y0+12); }
       g.strokeStyle="#232d39"; g.beginPath(); g.moveTo(0,y0+ph+.5); g.lineTo(W,y0+ph+.5); g.stroke();
       y0+=ph;
-    }
-    // axis line + date axis
+    });
     g.strokeStyle="#232d39"; g.beginPath(); g.moveTo(plotW+.5,0); g.lineTo(plotW+.5,H); g.stroke();
-    const d=this.cfg.dates, step=Math.max(1,Math.ceil(95/bw)); g.fillStyle="#7d8a99"; g.textAlign="center";
-    for(let i=Math.ceil(i0/step)*step;i<=i1;i+=step){ const x=this.xOf(i); if(x<30||x>plotW-30) continue; g.fillText(fd(d[i]),x,H-dateH/2); g.strokeStyle="#141c25"; g.beginPath(); g.moveTo(Math.round(x)+.5,0); g.lineTo(Math.round(x)+.5,H-dateH); g.stroke(); }
-    // crosshair
-    if(hi!=null){ const x=Math.round(this.xOf(hi))+.5; g.setLineDash([3,3]); g.strokeStyle="#6b7887"; g.beginPath(); g.moveTo(x,0); g.lineTo(x,H-dateH); g.stroke();
+    const d=this.cfg.dates; g.font=`12.5px ${F}`; const step=Math.max(1,Math.ceil(100/bw)); g.fillStyle="#9aa6b4"; g.textAlign="center";
+    for(let i=Math.ceil(i0/step)*step;i<=i1;i+=step){ const x=this.xOf(i); if(x<34||x>plotW-34) continue; g.fillText(fd(d[i]),x,H-dateH/2); g.strokeStyle="#141c25"; g.beginPath(); g.moveTo(Math.round(x)+.5,0); g.lineTo(Math.round(x)+.5,H-dateH); g.stroke(); }
+    if(hi!=null){ const x=Math.round(this.xOf(hi))+.5; g.setLineDash([3,3]); g.strokeStyle="#7d8a99"; g.beginPath(); g.moveTo(x,0); g.lineTo(x,H-dateH); g.stroke();
       if(this.my!=null&&this.my<H-dateH){ g.beginPath(); g.moveTo(0,this.my+.5); g.lineTo(plotW,this.my+.5); g.stroke(); g.setLineDash([]);
-        const pg=this.paneGeo.find(p=>this.my>=p.y0&&this.my<p.y0+p.ph); if(pg){ const v=pg.mn+(pg.bot-this.my)/(pg.bot-pg.top)*(pg.mx-pg.mn); g.fillStyle="#2a3644"; g.fillRect(plotW+1,this.my-9,axisW-2,18); g.fillStyle="#fff"; g.textAlign="left"; g.fillText(pg.fmt(v),plotW+8,this.my); } }
-      g.setLineDash([]); const lbl=fd(d[hi]); g.font="600 11px -apple-system,Segoe UI,Arial"; const tw2=g.measureText(lbl).width+14; g.fillStyle="#2a3644"; g.fillRect(x-tw2/2,H-dateH+2,tw2,dateH-4); g.fillStyle="#fff"; g.textAlign="center"; g.fillText(lbl,x,H-dateH/2); }
+        const pi=this.paneAt(this.my); if(pi!=null){ const pg=this.paneGeo[pi], v=this.valAt(pi,this.my); g.fillStyle="#3b4a5c"; g.fillRect(plotW+1,this.my-12,axisW-2,24);
+          g.fillStyle="#fff"; g.textAlign="left"; g.font=`700 13.5px ${F}`; g.fillText(pg.fmt(v),plotW+8,this.my); } }
+      g.setLineDash([]); const lbl=fd(d[hi]); g.font=`700 13.5px ${F}`; const tw2=g.measureText(lbl).width+18; g.fillStyle="#3b4a5c"; g.fillRect(x-tw2/2,H-dateH+1,tw2,dateH-2); g.fillStyle="#fff"; g.textAlign="center"; g.fillText(lbl,x,H-dateH/2); }
   }
 }
 
@@ -252,7 +279,7 @@ let BT=null; async function backtest(){ if(BT) return BT; const b=await J("data/
 const stateHTML = (s,d) => s==="L"?`<span class="pill L">▲ Uptrend ${d}d</span>`:s==="S"?`<span class="pill S">▼ Downtrend ${d}d</span>`:`<span class="pill N">No trend</span>`;
 
 /* ------------------------------------------------------------------ PORTFOLIO */
-const PF={mode:"both",sort:{k:"entry_date",d:-1},page:0,f:{side:"all",status:"all",pf:true,q:""}};
+const PF={eq:null,mode:"both",sort:{k:"entry_date",d:-1},page:0,f:{side:"all",status:"all",pf:true,q:""}};
 async function viewPortfolio(){
   const m=$("#main"); m.innerHTML='<div class="loading">Loading backtest…</div>';
   let b; try{ b=await backtest(); }catch(e){ m.innerHTML='<div class="empty">No backtest yet — it is created on the next run.</div>'; return; }
@@ -263,7 +290,8 @@ async function viewPortfolio(){
   <div class="row" style="justify-content:space-between;margin-bottom:14px">
     <div><h2>EMA Trend Portfolio <span class="muted" style="font-weight:400;font-size:14px">· backtest ${fd(md.dates[0])} → ${fd(md.dates.at(-1))}</span></h2>
     <div class="note">Enter at the next open after the EMA trend is set (${EMA_TXT.replace(/>/g,"&gt;")}; shorts the reverse order). Exit at the next open after a close beyond the EMA${EMA.exit}.
-    ${b.settings.max_positions} equal slots · ${b.settings.cost_per_side_pct}% cost per side · stocks ≥ $${b.settings.min_price} and ≥ ${(b.settings.min_avg_volume/1000).toFixed(0)}k avg volume · ${b.settings.stocks_tested.toLocaleString()} stocks tested.</div></div>
+    Every signal is traded (no position limit); each day's return is the equal-weighted average of all open trades. ${b.settings.cost_per_side_pct}% cost per side.
+    Liquid stocks only: price ≥ $${b.settings.min_price}, ≥ ${(b.settings.min_avg_volume/1000).toFixed(0)}k shares and ≥ $${((b.settings.min_avg_dollar_volume||0)/1e6).toFixed(0)}M traded per day (50-day average, on the signal day).</div></div>
     <div class="seg" id="pfmode">${[["both","Long + Short"],["long","Long only"],["short","Short only"]].map(([k,l])=>`<button data-m="${k}" class="${PF.mode===k?"on":""}">${l}</button>`).join("")}</div>
   </div>
   <div class="kpis">
@@ -280,6 +308,12 @@ async function viewPortfolio(){
     ${kp("Profit captured",(ts.capture??"–")+"%",`of the max run-up`)}
     ${kp("Exposure",(s.exposure??"–")+"%",`vol ${s.vol??"–"}% · Calmar ${s.calmar??"–"}`)}
   </div>
+  ${md.dollars?`<div class="card" style="padding:12px 16px"><div class="row" style="gap:28px">
+    <b>If every trade were $${num(md.dollars.per_trade,0)}:</b>
+    <span>Total profit <b class="${cls(md.dollars.total_pnl)}">$${num(md.dollars.total_pnl,0)}</b></span>
+    <span class="muted">closed <b class="${cls(md.dollars.closed_pnl)}">$${num(md.dollars.closed_pnl,0)}</b> · still open <b class="${cls(md.dollars.open_pnl)}">$${num(md.dollars.open_pnl,0)}</b></span>
+    <span class="muted">most trades open at once <b style="color:var(--text)">${md.dollars.max_open}</b> (avg ${md.dollars.avg_open})</span>
+    <span class="muted">capital needed at the peak <b style="color:var(--text)">$${num(md.dollars.peak_capital,0)}</b> → return on it <b class="${cls(md.dollars.return_on_peak)}">${pct(md.dollars.return_on_peak,1)}</b></span></div></div>`:""}
   <div class="card"><h3>Equity curve <small>account starts at 100 · strategy vs SPY buy &amp; hold · drag to pan, scroll to zoom, double-click to reset</small></h3><div id="eq"></div></div>
   <div class="card"><h3>Signals by date <small>every entry the rules produced on a day · click a row to open it on the chart</small></h3>
     <div class="row" style="margin-bottom:10px"><button id="sdp" title="Earlier date">‹</button><select id="sdsel"></select><button id="sdn" title="Later date">›</button><span class="muted" id="sdsum"></span></div>
@@ -289,7 +323,7 @@ async function viewPortfolio(){
     <div class="card"><h3>Trade return distribution <small>closed trades, % per trade</small></h3><div id="hist"></div></div>
   </div>
   <div class="grid2">
-    <div class="card"><h3>Statistics <small>portfolio vs every signal the rules produced</small></h3><div class="tbl-wrap" id="stats"></div></div>
+    <div class="card"><h3>Statistics <small>all trades, and longs vs shorts</small></h3><div class="tbl-wrap" id="stats"></div></div>
     <div class="card"><h3>Max run-up vs final result <small>each dot is a closed trade · above the line = gave back less</small></h3><canvas id="mfe" style="width:100%;height:330px"></canvas>
       <div class="note" id="mfenote"></div></div>
   </div>
@@ -300,15 +334,16 @@ async function viewPortfolio(){
       <input id="tq" placeholder="Search ticker" value="${esc(PF.f.q)}" style="width:150px">
       <select id="tside"><option value="all">Long + short</option><option value="long">Long</option><option value="short">Short</option></select>
       <select id="tstat"><option value="all">All trades</option><option value="closed">Closed</option><option value="open">Open</option></select>
-      <label class="muted"><input type="checkbox" id="tpf" ${PF.f.pf?"checked":""}> Portfolio trades only</label>
       <span class="muted" id="tcount"></span></div>
     <div class="tbl-wrap" id="tlog"></div><div class="pager" id="tpager"></div></div>`;
   $("#tside").value=PF.f.side; $("#tstat").value=PF.f.status;
   document.querySelectorAll("#pfmode button").forEach(x=>x.onclick=()=>{PF.mode=x.dataset.m;viewPortfolio();});
 
-  new RChart($("#eq"),{dates:md.dates,height:430,initial:md.dates.length,panes:[
+  if(PF.eq) PF.eq.destroy();
+  PF.eq=new RChart($("#eq"),{dates:md.dates,height:520,initial:md.dates.length,panes:[
     {w:3,title:"Equity",fmt:v=>v.toFixed(0),series:[{type:"line",name:"Strategy",v:md.equity,color:"#26a69a",width:2,tag:true},{type:"line",name:"SPY",v:md.spy,color:"#8794a3",width:1.5,tag:true}],refs:[{v:100,inRange:true}]},
-    {w:1,title:"Drawdown",fmt:v=>v.toFixed(0)+"%",series:[{type:"area",name:"DD",v:md.drawdown,color:"#ef5350",fill:"rgba(239,83,80,.18)"}],refs:[{v:0,inRange:true}]}]});
+    {w:1,title:"Drawdown",fmt:v=>v.toFixed(0)+"%",series:[{type:"area",name:"DD",v:md.drawdown,color:"#ef5350",fill:"rgba(239,83,80,.18)"}],refs:[{v:0,inRange:true}]},
+    ...(md.positions?[{w:.8,title:"Open trades",fmt:v=>v.toFixed(0),series:[{type:"area",name:"Open",v:md.positions,color:"#4c9ffe",fill:"rgba(76,159,254,.15)"}]}]:[])]});
 
   // monthly heatmap
   const years=[...new Set(Object.keys(md.monthly).map(k=>k.slice(0,4)))].sort();
@@ -329,7 +364,7 @@ async function viewPortfolio(){
   const rowsS=[["Trades","trades",""],["Closed / open",null,""],["Win rate","win_rate","%"],["Average trade","avg_pnl","%s"],["Median trade","median_pnl","%s"],["Average win","avg_win","%s"],["Average loss","avg_loss","%s"],["Payoff (avg win ÷ avg loss)","payoff",""],["Profit factor","profit_factor",""],["Best trade","best","%s"],["Worst trade","worst","%s"],["Avg days held","avg_bars",""],["Avg max run-up (MFE)","avg_mfe","%s"],["Avg max drawdown (MAE)","avg_mae","%s"],["Run-up of losing trades","avg_mfe_losers","%s"],["Drawdown of winning trades","avg_mae_winners","%s"],["Trades that ran ≥10%","pct_mfe_over_10","%"],["Profit captured of run-up","capture","%"],["Longest win / loss streak",null,""]];
   const cell=(o,k,f)=>{ if(k==null) return ""; const v=o[k]; if(v==null) return "–"; return f==="%s"?`<span class="${cls(v)}">${pct(v)}</span>`:f==="%"?v+"%":v; };
   const spec=(o,l)=>l==="Closed / open"?`${o.closed??"–"} / ${o.open??"–"}`:`${o.max_win_streak??"–"} / ${o.max_loss_streak??"–"}`;
-  $("#stats").innerHTML=`<table><thead><tr><th></th><th class="r">Portfolio</th><th class="r">Every signal</th></tr></thead><tbody>${rowsS.map(([l,k,f])=>`<tr><td>${l}</td><td class="r">${k?cell(ts,k,f):spec(ts,l)}</td><td class="r">${k?cell(ev,k,f):spec(ev,l)}</td></tr>`).join("")}</tbody></table>`;
+  const EVS=b.every_signal; $("#stats").innerHTML=`<table><thead><tr><th></th><th class="r">All trades</th><th class="r">Long</th><th class="r">Short</th></tr></thead><tbody>${rowsS.map(([l,k,f])=>`<tr><td>${l}</td>${[EVS.both,EVS.long,EVS.short].map(o=>`<td class="r">${o?(k?cell(o,k,f):spec(o,l)):"–"}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
 
   // MFE scatter
   drawScatter($("#mfe"),histRows);
@@ -342,7 +377,7 @@ async function viewPortfolio(){
     <p class="qlist">🔴 <b>Short:</b> ${lst(en.filter(x=>x.side==="short"),x=>`<span class="tk" data-tk="${esc(x.ticker)}">${esc(x.ticker)}</span>`)}</p>
     <p class="qlist">⚪ <b>Close (portfolio positions):</b> ${lst(ex.filter(inPF),x=>`<span class="tk" data-tk="${esc(x.ticker)}">${esc(x.ticker)}</span> <span class="${cls(x.pnl)}">${pct(x.pnl,1)}</span>`)}
       <span class="muted">· ${ex.filter(x=>!inPF(x)).length} other signals also exit</span></p>
-    <p class="note">Buys are ranked by relative strength (strongest first); the portfolio only takes as many as it has free slots.</p>`;
+    <p class="note">Every signal is taken. Buys are listed strongest relative strength first.</p>`;
 
   // open positions
   const op=b.rows.filter(r=>r.status!=="closed"&&inPF(r)&&inMode(r));
@@ -354,13 +389,13 @@ async function viewPortfolio(){
   $("#sdsel").innerHTML=sdates.map(d=>{const a=bySig[d]; const nl=a.filter(x=>x.side==="long").length; return `<option value="${d}">${fd(d)} — ${nl} long · ${a.length-nl} short</option>`;}).join("");
   const showSD=()=>{ const d=PF.sd; $("#sdsel").value=d; const a=sortRows(bySig[d]||[],"score",PF.mode==="short"?1:-1);
     const taken=a.filter(inPF).length, pendN=a.filter(x=>x.status==="pending").length;
-    $("#sdsum").textContent=`${a.length} signals on ${fd(d)}`+(pendN?` · enter at the next open`:` · ${taken} taken by the portfolio`);
-    $("#sdtbl").innerHTML=a.length?`<table class="trades"><thead><tr><th>Ticker</th><th>Side</th><th class="r">RS score</th><th>Entry</th><th class="r">Entry px</th><th>Exit</th><th class="r">Days</th><th class="r">P&amp;L</th><th class="r">Max run-up</th><th class="r">Max drawdown</th><th>Portfolio</th></tr></thead><tbody>${a.map(r=>`<tr data-trade="${esc(r.ticker)}|${r.signal}" title="Show on the chart">
+    $("#sdsum").textContent=`${a.length} signals on ${fd(d)}`+(pendN?` · enter at the next open`:``);
+    $("#sdtbl").innerHTML=a.length?`<table class="trades"><thead><tr><th>Ticker</th><th>Side</th><th class="r">RS score</th><th>Entry</th><th class="r">Entry px</th><th>Exit</th><th class="r">Days</th><th class="r">P&amp;L</th><th class="r">Max run-up</th><th class="r">Max drawdown</th><th>Status</th></tr></thead><tbody>${a.map(r=>`<tr data-trade="${esc(r.ticker)}|${r.signal}" title="Show on the chart">
       <td><span class="tk">${esc(r.ticker)}</span> ${starHTML(r.ticker)}</td><td><span class="pill ${r.side==="long"?"L":"S"}">${r.side==="long"?"Long":"Short"}</span></td>
       <td class="r">${r.score==null?"–":r.score.toFixed(1)}</td><td>${r.status==="pending"?'<span class="gold">next open</span>':fd(r.entry_date)}</td><td class="r">${fmtPx(r.entry)}</td>
       <td>${r.status==="closed"?fd(r.exit_date):r.status==="pending"?"–":'<span class="muted">open</span>'}</td><td class="r">${r.bars??"–"}</td>
       <td class="r ${cls(r.pnl)}"><b>${pct(r.pnl)}</b></td><td class="r up">${pct(r.mfe)}</td><td class="r down">${pct(r.mae)}</td>
-      <td>${r.status==="pending"?'<span class="muted">pending</span>':inPF(r)?'<span class="up">✓ taken</span>':'<span class="muted">no free slot</span>'}</td></tr>`).join("")}</tbody></table>`:'<div class="empty">No signals on this date.</div>'; };
+      <td>${r.status==="pending"?'<span class="gold">enter next open</span>':r.status==="closed"?'<span class="muted">closed</span>':'<span class="up">open</span>'}</td></tr>`).join("")}</tbody></table>`:'<div class="empty">No signals on this date.</div>'; };
   $("#sdsel").onchange=e=>{PF.sd=e.target.value;showSD();};
   $("#sdp").onclick=()=>{const i=sdates.indexOf(PF.sd); if(i<sdates.length-1){PF.sd=sdates[i+1];showSD();}};
   $("#sdn").onclick=()=>{const i=sdates.indexOf(PF.sd); if(i>0){PF.sd=sdates[i-1];showSD();}};
@@ -368,7 +403,7 @@ async function viewPortfolio(){
   renderLog();
   const upd=()=>{PF.page=0;renderLog();};
   $("#tq").oninput=e=>{PF.f.q=e.target.value.toUpperCase();upd();}; $("#tside").onchange=e=>{PF.f.side=e.target.value;upd();};
-  $("#tstat").onchange=e=>{PF.f.status=e.target.value;upd();}; $("#tpf").onchange=e=>{PF.f.pf=e.target.checked;upd();};
+  $("#tstat").onchange=e=>{PF.f.status=e.target.value;upd();}; 
 }
 const TCOLS=[["ticker","Ticker"],["side","Side"],["signal","Signal"],["entry_date","Entry"],["entry","Entry px"],["exit_date","Exit"],["exit","Exit px"],["bars","Days"],["pnl","P&L"],["mfe","Max run-up"],["mae","Max drawdown"],["status","Status"]];
 function tradeTable(rows,sortable=true){
@@ -382,7 +417,7 @@ function tradeTable(rows,sortable=true){
     <td class="muted">${r.status==="closed"?"closed":r.status==="open"?"open":"exit at next open"}</td></tr>`).join("")}</tbody></table>`; }
 function renderLog(){
   const b=BT, f=PF.f; let rows=b.rows.filter(r=>(f.side==="all"||r.side===f.side)&&(PF.mode==="both"||r.side===PF.mode)
-    &&(f.status==="all"||(f.status==="closed"?r.status==="closed":r.status!=="closed"))&&(!f.pf||(r.in_pf||"").includes(PF.mode[0]))&&(!f.q||r.ticker.startsWith(f.q)));
+    &&(f.status==="all"||(f.status==="closed"?r.status==="closed":r.status!=="closed"))&&(!f.q||r.ticker.startsWith(f.q)));
   rows=sortRows(rows,PF.sort.k,PF.sort.d); const per=50, pages=Math.max(1,Math.ceil(rows.length/per)); PF.page=Math.min(PF.page,pages-1);
   $("#tcount").textContent=`${rows.length.toLocaleString()} trades`;
   $("#tlog").innerHTML=rows.length?tradeTable(rows.slice(PF.page*per,PF.page*per+per)):'<div class="empty">No trades match.</div>';
@@ -405,7 +440,7 @@ function drawScatter(cv,rows){
 }
 
 /* ------------------------------------------------------------------ CHART */
-let CH={ticker:null,chart:null,bars:252};
+let CH={ticker:null,chart:null,bars:70};
 async function viewChart(ticker,focus){
   const st=await stocks(); ticker=(ticker||CH.ticker||localStorage.getItem("mr_last")||"SPY").toUpperCase(); CH.ticker=ticker; try{localStorage.setItem("mr_last",ticker);}catch(e){}
   const recent=JSON.parse(localStorage.getItem("mr_recent")||"[]").filter(x=>x!==ticker); recent.unshift(ticker); try{localStorage.setItem("mr_recent",JSON.stringify(recent.slice(0,10)));}catch(e){}
@@ -413,12 +448,13 @@ async function viewChart(ticker,focus){
   m.innerHTML=`<div class="row" style="margin-bottom:12px">
       <form id="cf" class="row"><input id="cq" list="tklist" placeholder="Ticker or company" value="${esc(ticker)}" style="width:240px" autocomplete="off"><button class="pri">Go</button></form>
       <datalist id="tklist"></datalist>
-      <div class="seg" id="rng">${[["3M",63],["6M",126],["1Y",252],["2Y",504],["All",99999]].map(([l,v])=>`<button data-v="${v}" class="${CH.bars===v?"on":""}">${l}</button>`).join("")}</div>
+      <div class="seg" id="rng">${[["70 bars",70],["6M",126],["1Y",252],["2Y",504],["All",99999]].map(([l,v])=>`<button data-v="${v}" class="${CH.bars===v?"on":""}">${l}</button>`).join("")}</div>
+      <button id="mbtn" title="Measure a move: click and drag on the chart (or hold Shift and drag anywhere). Esc clears it.">📏 Measure</button>
       <div class="chips">${recent.slice(1,9).map(t=>`<span class="chip" data-tk="${esc(t)}">${esc(t)}</span>`).join("")}</div></div>
     <div class="card" style="padding:12px 14px"><div class="info" id="cinfo"></div></div>
     <div class="card" style="padding:8px"><div id="cv"></div>
-      <div class="note" style="padding:6px 8px 2px"><span style="color:#26a69a">▲ BUY</span> / <span style="color:#ef5350">▼ SHORT</span> = strategy entry (next open after the EMA trend is set) ·
-      <span class="gold">EXIT</span> = position closed, with its result · <span style="color:#7fc4ff">small ▲</span> = close above the previous 20-day high ·
+      <div class="note" style="padding:6px 8px 2px">Scroll = zoom · drag = move · drag or scroll on the price axis = zoom prices (any pane) · double-click = reset to 70 candles · 📏 or Shift+drag = measure.<br><span style="color:#26a69a">▲ BUY</span> / <span style="color:#ef5350">▼ SHORT</span> = strategy entry (next open after the EMA trend is set) ·
+      <span class="gold">EXIT</span> = position closed, with its result · <span style="color:#7fc4ff">small ▲ under a candle</span> = close above the previous 20-day high ·
       green / red shading = EMA uptrend / downtrend (${EMA_TXT})</div></div>
     <div class="card"><h3>Backtest trades in ${esc(ticker)} <small>click a trade to jump to it on the chart</small></h3><div class="tbl-wrap" id="ctr"><div class="loading">…</div></div></div>`;
   const dl=$("#tklist"); dl.innerHTML=st.list.map(x=>`<option value="${esc(x.ticker)}">${esc(x.name)}</option>`).join("");
@@ -440,9 +476,10 @@ async function viewChart(ticker,focus){
     for(const r of trades){ const ei=idx[r.entry_date], L=r.side==="long"; if(ei!=null) markers.push({i:ei,pos:L?"below":"above",dir:L?"up":"down",size:9,stroke:true,color:L?"#26a69a":"#ef5350",text:L?"BUY":"SHORT"});
       if(r.status==="closed"){ const xi=idx[r.exit_date]; if(xi!=null) markers.push({i:xi,pos:L?"above":"below",dir:L?"down":"up",size:9,stroke:true,color:"#f5c542",text:"EXIT "+pct(r.pnl,1)}); } } }catch(e){}
   for(let i=20;i<c.length;i++){ let hh=-Infinity; for(let k=i-20;k<i;k++) if(h[k]!=null&&h[k]>hh) hh=h[k];   // close above previous 20-day high
-    if(c[i]!=null&&c[i]>hh) markers.push({i,pos:"above",dir:"up",size:4,color:"#7fc4ff"}); }
-  if(CH.chart) CH.chart.ro.disconnect();
-  CH.chart=new RChart($("#cv"),{dates,height:Math.max(560,Math.min(860,window.innerHeight-230)),initial:CH.bars,panes:[
+    if(c[i]!=null&&c[i]>hh) markers.push({i,pos:"below",dir:"up",size:4.5,color:"#7fc4ff"}); }
+  if(CH.chart) CH.chart.destroy();
+  CH.chart=new RChart($("#cv"),{dates,height:Math.max(580,Math.min(880,window.innerHeight-220)),initial:70,
+    onMeasureEnd:()=>$("#mbtn").classList.remove("pri"),panes:[
     {w:3.2,title:ticker+" · D",bands,markers,series:[{type:"candle",o,h,l,c,tag:true,tagColor:c.at(-1)>=o.at(-1)?"#26a69a":"#ef5350"},
       ...EP.map((p,k)=>({type:"line",name:"EMA"+p,v:t.e[p],color:EMA_COL[p]||["#00bcd4","#4c9ffe","#f5a623","#ec407a","#c77dff"][k%5],width:1.2+k*.2})),
       {type:"volume",v,o,c,overlay:true,nolegend:true}]},
@@ -451,10 +488,12 @@ async function viewChart(ticker,focus){
       {type:"line",name:"MACD",v:macd,color:"#4c9ffe"},{type:"line",name:"Signal",v:sigRaw,color:"#f5a623"}]},
     {w:1,title:"DMI 14",fmt:x=>x.toFixed(1),refs:[{v:20,color:"#3a4654"}],series:[
       {type:"line",name:"+DI",v:dm.plus,color:"#26a69a"},{type:"line",name:"−DI",v:dm.minus,color:"#ef5350"},{type:"line",name:"ADX",v:dm.adx,color:"#f5c542",width:1.8}]}]});
+  if(CH.bars!==70) CH.chart.setBars(CH.bars);
+  $("#mbtn").onclick=()=>{ const on=!CH.chart.measureMode; CH.chart.setMeasure(on); $("#mbtn").classList.toggle("pri",on); };
   $("#ctr").innerHTML=trades.length?tradeTable(sortRows(trades,"entry_date",-1),false):'<div class="empty">The strategy has not traded this ticker in the backtest period.</div>';
   if(focus){ const tr=trades.find(r=>r.signal===focus); const si=idx[focus]??idx[tr?.entry_date];
     if(si!=null){ const ex=tr?(tr.status==="closed"?idx[tr.exit_date]:dates.length-1):si+1; CH.chart.highlight(si,ex??si+1);
-      CH.chart.centerOn(si,Math.max(CH.bars<99999?CH.bars:252,((ex??si)-si)*2+40)); }
+      CH.chart.centerOn(si,Math.max(70,((ex??si)-si)*1.6+20)); }
     document.querySelectorAll("#ctr tr[data-trade]").forEach(r=>r.classList.toggle("sel",r.dataset.trade===`${ticker}|${focus}`));
     $("#cv").scrollIntoView({behavior:"smooth",block:"start"}); }
 }
@@ -551,7 +590,8 @@ function rrg(rows){
 async function route(){
   const [r,arg,arg2]=(location.hash.slice(1)||"portfolio").split("/");
   document.querySelectorAll("#nav a").forEach(a=>a.classList.toggle("on",a.dataset.r===r));
-  if(CH.chart&&r!=="chart"){ CH.chart.ro.disconnect(); CH.chart=null; }
+  if(CH.chart&&r!=="chart"){ CH.chart.destroy(); CH.chart=null; }
+  if(PF.eq&&r!=="portfolio"){ PF.eq.destroy(); PF.eq=null; }
   try{
     if(r==="scanner") await viewScanner(); else if(r==="chart") await viewChart(arg&&decodeURIComponent(arg),arg2);
     else if(r==="watchlist") await viewWatchlist(); else if(r==="rotation") await viewRotation(); else await viewPortfolio();

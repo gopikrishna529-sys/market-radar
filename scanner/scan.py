@@ -32,6 +32,7 @@ def scan_universe(w, ind):
     ok = (c.columns.isin(tick["ticker"])
           & (c.iloc[-1] >= u["min_price"]).values
           & (ind["avg_vol"].iloc[-1] >= u["min_avg_volume"]).values
+          & (ind["avg_dollar_vol"].iloc[-1] >= u.get("min_avg_dollar_volume", 0)).values
           & (c.notna().sum() >= u["min_history_days"]).values)
     return c.columns[ok]
 

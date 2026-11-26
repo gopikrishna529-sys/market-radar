@@ -16,8 +16,10 @@ history:
 # Which stocks to scan
 universe:
   ticker_types: ["CS", "ADRC"]   # CS = common stock, ADRC = ADRs. ETFs are excluded.
-  min_price: 5.0                 # ignore stocks below $5
-  min_avg_volume: 500000         # 50-day average daily volume
+  # Liquidity filter (checked on the signal day for the backtest, on the last day for the scanner)
+  min_price: 10.0                # ignore stocks below $10
+  min_avg_volume: 300000         # 50-day average shares traded per day
+  min_avg_dollar_volume: 20000000   # 50-day average traded value per day ($20M)
   min_history_days: 210          # need enough bars for the 200 EMA
 
 # EMA trend: EMA9 > EMA20 > EMA50 > EMA100 > EMA200 (long). Short = the reverse order.
@@ -67,7 +69,9 @@ industries:
 #   Short: EMA downtrend becomes set -> short next open; exit next open after a close ABOVE the exit EMA (50)
 backtest:
   sides: ["long", "short"]
-  max_positions: 20              # portfolio slots, each = 1/20 of the account at entry
+  # No position limit: every signal is traded. The portfolio's daily return is the equal-weighted
+  # average of all open trades; the dollar view assumes the same amount in every trade.
+  dollars_per_trade: 10000
   cost_per_side_pct: 0.05        # commission + slippage per buy/sell, in %
 
 # Chart page: which tickers get a chart file

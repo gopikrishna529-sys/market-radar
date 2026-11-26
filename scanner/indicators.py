@@ -36,6 +36,7 @@ def compute(w):
         "long_trend": long_trend, "short_trend": short_trend,
         "score": score,
         "avg_vol": w["volume"].rolling(50, min_periods=20).mean(),
+        "avg_dollar_vol": (w["volume"] * c).rolling(50, min_periods=20).mean(),
         "chg": c.pct_change(fill_method=None) * 100,
     }
 

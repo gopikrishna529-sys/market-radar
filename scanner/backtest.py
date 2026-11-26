@@ -7,13 +7,11 @@ Rules (all on daily candles, split-adjusted):
   SHORT  signal : EMA downtrend becomes set (EMA9 < EMA20 < EMA50 < EMA100 < EMA200)
                                                           -> short at the next day's open
          exit   : a daily close ABOVE the EMA50            -> cover at the next day's open
-Only stocks that pass the scan filters on the signal day (price, average volume) are traded,
+Only liquid stocks on the signal day (price, average volume, average traded value) are traded,
 and only one position per stock at a time.
 
-Two views are produced:
-  * every signal  - statistics over every trade the rules generate
-  * portfolio     - a realistic account with N equal slots; when more signals arrive than free slots,
-                    the strongest relative strength (weakest for shorts) is taken first.
+Every signal is traded (no position limit). The portfolio's daily return is the equal-weighted average
+of all open trades; a dollar view assumes the same amount in every trade.
 """
 import json
 import math
@@ -45,12 +43,14 @@ def generate_trades(w, ind):
 
     tick = set(load_tickers()["ticker"])
     cols = [t for t in w["close"].columns if t in tick]
-    elig = (w["close"][cols] >= u["min_price"]) & (ind["avg_vol"][cols] >= u["min_avg_volume"])
+    elig = ((w["close"][cols] >= u["min_price"]) & (ind["avg_vol"][cols] >= u["min_avg_volume"])
+            & (ind["avg_dollar_vol"][cols] >= u.get("min_avg_dollar_volume", 0)))
     L, S = ind["long_trend"][cols], ind["short_trend"][cols]
     long_sig = L & ~L.shift(1, fill_value=False) & elig
     short_sig = S & ~S.shift(1, fill_value=False) & elig
 
-    O, H, Lo, C = (w[k][cols].to_numpy() for k in ("open", "high", "low", "close"))
+    O, H, Lo = (w[k][cols].to_numpy() for k in ("open", "high", "low"))
+    C = w["close"][cols].ffill().to_numpy()          # forward-filled so a missing day does not break a trade
     EM = ind["ema_exit"][cols].to_numpy()
     SC = ind["score"][cols].to_numpy()
     LS, SS = long_sig.to_numpy(), short_sig.to_numpy()
@@ -101,7 +101,7 @@ def generate_trades(w, ind):
             trades.append({
                 "ticker": t, "side": "long" if side == 1 else "short",
                 "signal_i": i, "entry_i": e, "exit_i": exit_i, "col": j,
-                "entry": entry, "exit": exit_px, "bars": exit_i - e,
+                "entry": entry, "exit": exit_px, "exit_eff": exit_eff, "bars": exit_i - e,
                 "pnl": pnl * 100, "mfe": mfe * 100, "mae": mae * 100,
                 "status": status, "score": SC[i, j], "in_pf": "",
             })
@@ -109,58 +109,34 @@ def generate_trades(w, ind):
     return trades, cols, C, O, pending
 
 
-def simulate(trades, w, C, O, sides, max_pos, cost):
-    """Equal-slot portfolio. Returns daily equity (start 100) and invested fraction."""
-    dates = w["close"].index
-    n = len(dates)
-    by_entry = {}
-    for k, tr in enumerate(trades):
-        if tr["side"] in sides:
-            by_entry.setdefault(tr["entry_i"], []).append(k)
-    if not by_entry:
+def simulate(trades, C, sides, n):
+    """Portfolio that takes EVERY signal (no position limit).
+
+    Each day's return is the equal-weighted average of the daily returns of all trades open that day
+    (entry day: entry price -> close; exit day: previous close -> exit price). Returns equity (start 100).
+    """
+    tot, cnt = np.zeros(n), np.zeros(n)
+    used = [tr for tr in trades if tr["side"] in sides]
+    if not used:
         return None
-    start = min(by_entry) - 1
-    cash, equity_prev = 100.0, 100.0
-    pos = {}                     # trade index -> (alloc, last_value)
-    eq, inv, taken = [], [], set()
-    for d in range(start, n):
-        # 1) exits at today's open
-        for k in [k for k in pos if trades[k]["exit_i"] == d and trades[k]["status"] == "closed"]:
-            tr = trades[k]
-            alloc, _ = pos.pop(k)
-            cash += alloc * (1 + tr["pnl"] / 100)
-        # 2) entries at today's open
-        cands = by_entry.get(d, [])
-        if cands and len(pos) < max_pos:
-            def strength(k):                 # strongest RS first for longs, weakest first for shorts
-                s = trades[k]["score"]
-                if not np.isfinite(s):
-                    return -1e9
-                return s if trades[k]["side"] == "long" else -s
-            cands = sorted(cands, key=strength, reverse=True)
-            for k in cands:
-                if len(pos) >= max_pos:
-                    break
-                alloc = min(equity_prev / max_pos, cash)
-                if alloc < equity_prev / max_pos * 0.5:
-                    break
-                cash -= alloc
-                pos[k] = (alloc, alloc)
-                taken.add(k)
-        # 3) mark to market at today's close
-        value = 0.0
-        for k, (alloc, last) in pos.items():
-            tr = trades[k]
-            px = C[d, tr["col"]]
-            if np.isfinite(px):
-                r = px / tr["entry"] if tr["side"] == "long" else 2 - px / tr["entry"]
-                last = alloc * r
-                pos[k] = (alloc, last)
-            value += last
-        equity_prev = cash + value
-        eq.append(equity_prev)
-        inv.append(value / equity_prev if equity_prev > 0 else 0)
-    return {"start": start, "equity": np.array(eq), "invested": np.array(inv), "taken": taken}
+    for tr in used:
+        e = tr["entry_i"]
+        end = tr["exit_i"] if tr["status"] == "closed" else n - 1
+        px = C[e:end + 1, tr["col"]].copy()
+        if tr["status"] == "closed":
+            px[-1] = tr["exit_eff"]
+        prev = np.concatenate(([tr["entry"]], px[:-1]))
+        r = px / prev - 1
+        if tr["side"] == "short":
+            r = -r
+        r = np.nan_to_num(r)
+        tot[e:end + 1] += r
+        cnt[e:end + 1] += 1
+    start = max(0, min(tr["entry_i"] for tr in used) - 1)
+    daily = np.where(cnt > 0, tot / np.maximum(cnt, 1), 0.0)[start:]
+    daily[0] = 0.0
+    return {"start": start, "equity": 100 * np.cumprod(1 + daily),
+            "invested": (cnt[start:] > 0).astype(float), "count": cnt[start:]}
 
 
 def equity_stats(eq, dates, invested=None):
@@ -232,14 +208,14 @@ def trade_stats(tr):
 def run_backtest(w, ind):
     bt = CONFIG["backtest"]
     cost = bt.get("cost_per_side_pct", 0.0) / 100.0
-    max_pos = int(bt.get("max_positions", 20))
+    dollars = float(bt.get("dollars_per_trade", 10000))
     trades, cols, C, O, pending = generate_trades(w, ind)
     dates = w["close"].index
     spy = w["close"][CONFIG["relative_strength"]["benchmark"]]
 
     modes = {}
     for mode, sides in (("both", ("long", "short")), ("long", ("long",)), ("short", ("short",))):
-        sim = simulate(trades, w, C, O, sides, max_pos, cost)
+        sim = simulate(trades, C, sides, len(dates))
         if not sim:
             continue
         d = dates[sim["start"]:]
@@ -248,9 +224,13 @@ def run_backtest(w, ind):
         s = spy.reindex(d).ffill()
         spy_eq = (s / s.iloc[0] * 100).to_numpy()
         spy_stats, _ = equity_stats(spy_eq, d)
-        pf_trades = [trades[k] for k in sim["taken"]]
-        for k in sim["taken"]:                 # b = in the long+short portfolio, l = long-only, s = short-only
-            trades[k]["in_pf"] += mode[0]
+        pf_trades = [t for t in trades if t["side"] in sides]
+        for t in pf_trades:                    # b = in the long+short portfolio, l = long-only, s = short-only
+            t["in_pf"] += mode[0]
+        cnt = sim["count"]
+        usd = sum(t["pnl"] / 100 * dollars for t in pf_trades)
+        usd_closed = sum(t["pnl"] / 100 * dollars for t in pf_trades if t["status"] == "closed")
+        peak_cap = float(cnt.max()) * dollars
         eqs = pd.Series(eq, index=d)
         monthly = (eqs.resample("ME").last() / eqs.resample("ME").last().shift(1).fillna(eqs.iloc[0]) - 1) * 100
         yearly = (eqs.resample("YE").last() / eqs.resample("YE").last().shift(1).fillna(eqs.iloc[0]) - 1) * 100
@@ -260,6 +240,12 @@ def run_backtest(w, ind):
             "spy": [_r(x) for x in spy_eq],
             "drawdown": [_r(x) for x in dd],
             "invested": [_r(x * 100, 1) for x in sim["invested"]],
+            "positions": [int(x) for x in cnt],
+            "dollars": {"per_trade": dollars, "total_pnl": _r(usd, 0), "closed_pnl": _r(usd_closed, 0),
+                        "open_pnl": _r(usd - usd_closed, 0), "max_open": int(cnt.max()),
+                        "avg_open": _r(float(cnt[cnt > 0].mean()) if (cnt > 0).any() else 0, 1),
+                        "peak_capital": _r(peak_cap, 0),
+                        "return_on_peak": _r(usd / peak_cap * 100, 1) if peak_cap else None},
             "stats": stats, "spy_stats": spy_stats,
             "trade_stats": trade_stats(pf_trades),
             "monthly": {k.strftime("%Y-%m"): _r(v) for k, v in monthly.items()},
@@ -283,8 +269,9 @@ def run_backtest(w, ind):
         "data_start": ds[0], "data_end": ds[-1],
         "first_signal": ds[first_signal] if first_signal is not None else None,
         "settings": {
-            "ema": CONFIG["ema"], "max_positions": max_pos, "cost_per_side_pct": bt.get("cost_per_side_pct", 0),
+            "ema": CONFIG["ema"], "dollars_per_trade": dollars, "cost_per_side_pct": bt.get("cost_per_side_pct", 0),
             "min_price": CONFIG["universe"]["min_price"], "min_avg_volume": CONFIG["universe"]["min_avg_volume"],
+            "min_avg_dollar_volume": CONFIG["universe"].get("min_avg_dollar_volume", 0),
             "stocks_tested": len(cols),
         },
         "modes": modes, "every_signal": every,

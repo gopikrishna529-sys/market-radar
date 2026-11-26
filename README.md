@@ -8,7 +8,7 @@ Scans **every US stock** after each market close and:
 - **emails you** the lists and the strategy's orders for the next open, and **updates a website** with:
   - **Portfolio**: a backtest of the EMA-trend strategy (long and short), with an equity curve vs SPY, drawdown, monthly returns, max run-up / max drawdown per trade, every trade, open positions and the orders for the next open
   - **Scanner**: the daily lists, with history by date
-  - **Chart**: a daily candle chart for any stock, with EMA 20/50/200, volume, MACD, DMI/ADX, trend shading and the strategy's buy/sell markers
+  - **Chart**: a daily candle chart for any stock (70 candles by default), with EMA 9/20/50/100/200, volume, MACD, DMI/ADX, trend shading, 20-day-high breakout marks, the strategy's BUY/EXIT markers, price zoom on every pane and a measure tool
   - **Watchlist**: your own lists, saved in your browser (Export/Import to move them between computers)
   - **Sector Rotation**: sector and industry ETFs ranked against SPY
 
@@ -87,7 +87,8 @@ After that, it runs **by itself every weekday at 5:30 pm New York time**, with a
 ## Strategy rules (Portfolio tab)
 - **Long:** the EMA trend becomes set (EMA9 > EMA20 > EMA50 > EMA100 > EMA200) → buy at the **next day's open**. Exit at the next open after a **close below the EMA50**.
 - **Short:** the reverse order (EMA9 < EMA20 < EMA50 < EMA100 < EMA200) → short at the next open; cover at the next open after a **close above the EMA50**.
-- 20 equal portfolio slots, 0.05% cost per side, stocks ≥ $5 and ≥ 500k average volume. When there are more signals than free slots, the strongest relative strength is taken first. All of this can be changed in `config.yaml` under `backtest:`.
+- **Every signal is traded** (no position limit). The portfolio's daily return is the equal-weighted average of all open trades; a dollar view assumes $10,000 per trade.
+- Liquid stocks only (checked on the signal day): price ≥ $10, ≥ 300k shares and ≥ $20M traded per day (50-day averages). 0.05% cost per side. Change these in `config.yaml` (`universe:` and `backtest:`).
 - Known limits: dividends are not included, and stocks that have since been delisted are left out, which flatters results slightly.
 
 ## History length
