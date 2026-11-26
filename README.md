@@ -1,7 +1,7 @@
 # Market Radar
 
 Scans **every US stock** after each market close and:
-- finds stocks in an **EMA trend** (Close > EMA20 > EMA50 > EMA200, EMAs rising)
+- finds stocks in an **EMA trend** (EMA9 > EMA20 > EMA50 > EMA100 > EMA200)
 - finds **EMA trend + 20-day breakouts**
 - lists stocks that went **up while SPY was down**, and **RS leaders** (RS rating ≥ 80 with the RS line at a 50-day high)
 - ranks **sector and industry rotation** against SPY
@@ -85,8 +85,8 @@ After that, it runs **by itself every weekday at 5:30 pm New York time**, with a
 - `results/YYYY-MM-DD.json`: each day's scan results, so the website keeps a history you can browse by date.
 
 ## Strategy rules (Portfolio tab)
-- **Long:** the EMA trend becomes set (Close > EMA20 > EMA50 > EMA200, EMA20 and EMA50 rising) → buy at the **next day's open**. Exit at the next open after a **close below the EMA50**.
-- **Short:** the mirror image → short at the next open; cover at the next open after a **close above the EMA50**.
+- **Long:** the EMA trend becomes set (EMA9 > EMA20 > EMA50 > EMA100 > EMA200) → buy at the **next day's open**. Exit at the next open after a **close below the EMA50**.
+- **Short:** the reverse order (EMA9 < EMA20 < EMA50 < EMA100 < EMA200) → short at the next open; cover at the next open after a **close above the EMA50**.
 - 20 equal portfolio slots, 0.05% cost per side, stocks ≥ $5 and ≥ 500k average volume. When there are more signals than free slots, the strongest relative strength is taken first. All of this can be changed in `config.yaml` under `backtest:`.
 - Known limits: dividends are not included, and stocks that have since been delisted are left out, which flatters results slightly.
 

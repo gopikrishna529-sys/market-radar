@@ -20,12 +20,10 @@ universe:
   min_avg_volume: 500000         # 50-day average daily volume
   min_history_days: 210          # need enough bars for the 200 EMA
 
-# EMA trend rule:  Close > EMA fast > EMA mid > EMA slow, and the fast + mid EMAs rising
+# EMA trend: EMA9 > EMA20 > EMA50 > EMA100 > EMA200 (long). Short = the reverse order.
 ema:
-  fast: 20
-  mid: 50
-  slow: 200
-  rising_lookback: 5             # "rising" = higher than N days ago
+  periods: [9, 20, 50, 100, 200]
+  exit: 50                       # strategy exits after a daily close beyond this EMA
 
 # Breakout rule: EMA trend AND close above the highest high of the previous N days
 breakout:
@@ -65,8 +63,8 @@ industries:
   JETS: Airlines
 
 # Portfolio backtest (Portfolio tab)
-#   Long : EMA trend becomes set -> buy next open;  exit next open after a close BELOW the EMA mid (50)
-#   Short: EMA downtrend becomes set -> short next open; exit next open after a close ABOVE the EMA mid (50)
+#   Long : EMA trend becomes set -> buy next open;  exit next open after a close BELOW the exit EMA (50)
+#   Short: EMA downtrend becomes set -> short next open; exit next open after a close ABOVE the exit EMA (50)
 backtest:
   sides: ["long", "short"]
   max_positions: 20              # portfolio slots, each = 1/20 of the account at entry

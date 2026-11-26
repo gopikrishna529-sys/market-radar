@@ -13,10 +13,13 @@ def compute(w):
     """Return a dict of wide DataFrames: EMAs, trend states, RS score, average volume."""
     e = CONFIG["ema"]
     c = w["close"]
-    ef, em, es = ema(c, e["fast"]), ema(c, e["mid"]), ema(c, e["slow"])
-    L = e["rising_lookback"]
-    long_trend = (c > ef) & (ef > em) & (em > es) & (ef > ef.shift(L)) & (em > em.shift(L))
-    short_trend = (c < ef) & (ef < em) & (em < es) & (ef < ef.shift(L)) & (em < em.shift(L))
+    periods = sorted(e["periods"])
+    emas = {p: ema(c, p) for p in sorted(set(periods) | {20, e["exit"]})}
+    long_trend = short_trend = None
+    for a, b in zip(periods, periods[1:]):          # EMA9 > EMA20 > EMA50 > EMA100 > EMA200
+        up, dn = emas[a] > emas[b], emas[a] < emas[b]
+        long_trend = up if long_trend is None else long_trend & up
+        short_trend = dn if short_trend is None else short_trend & dn
 
     # RS score: IBD-style weighted 3/6/9/12-month performance (uses what history exists)
     parts, weights = [], []
@@ -28,7 +31,8 @@ def compute(w):
     score = (sum(parts) / wsum).where(wsum > 0)
 
     return {
-        "ema_fast": ef, "ema_mid": em, "ema_slow": es,
+        "emas": emas,
+        "ema20": emas[20], "ema_exit": emas[e["exit"]], "ema_slow": emas[periods[-1]],
         "long_trend": long_trend, "short_trend": short_trend,
         "score": score,
         "avg_vol": w["volume"].rolling(50, min_periods=20).mean(),

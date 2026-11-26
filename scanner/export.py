@@ -76,7 +76,7 @@ def build_site(w, ind):
     rating = rs_rating(ind["score"].iloc[-1], uni)
     lt, st = ind["long_trend"][chart_set], ind["short_trend"][chart_set]
     l_days, s_days = streak(lt), streak(st)
-    em = ind["ema_mid"].iloc[-1]
+    em = ind["ema_exit"].iloc[-1]
     uni_set = set(uni)
     names = tick["name"].to_dict()
     names.update({**CONFIG["sectors"], **(CONFIG.get("industries") or {}),

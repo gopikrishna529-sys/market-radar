@@ -44,7 +44,7 @@ def run_scan(w, ind):
         raise RuntimeError(f"Benchmark {bench} missing from data")
     date = c.index[-1]
     spy = c[bench]
-    ef, es = ind["ema_fast"], ind["ema_slow"]
+    ef, es = ind["ema20"], ind["ema_slow"]
     trend = ind["long_trend"]
 
     N = cfg["breakout"]["lookback_days"]

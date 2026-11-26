@@ -1,10 +1,10 @@
 """Historical test of the EMA-trend strategy.
 
 Rules (all on daily candles, split-adjusted):
-  LONG   signal : EMA trend becomes set today (Close > EMA20 > EMA50 > EMA200, EMA20 & EMA50 rising)
+  LONG   signal : EMA trend becomes set today (EMA9 > EMA20 > EMA50 > EMA100 > EMA200)
                   and it was not set yesterday            -> buy at the NEXT day's open
          exit   : a daily close BELOW the EMA50            -> sell at the next day's open
-  SHORT  signal : EMA downtrend becomes set (Close < EMA20 < EMA50 < EMA200, both falling)
+  SHORT  signal : EMA downtrend becomes set (EMA9 < EMA20 < EMA50 < EMA100 < EMA200)
                                                           -> short at the next day's open
          exit   : a daily close ABOVE the EMA50            -> cover at the next day's open
 Only stocks that pass the scan filters on the signal day (price, average volume) are traded,
@@ -51,7 +51,7 @@ def generate_trades(w, ind):
     short_sig = S & ~S.shift(1, fill_value=False) & elig
 
     O, H, Lo, C = (w[k][cols].to_numpy() for k in ("open", "high", "low", "close"))
-    EM = ind["ema_mid"][cols].to_numpy()
+    EM = ind["ema_exit"][cols].to_numpy()
     SC = ind["score"][cols].to_numpy()
     LS, SS = long_sig.to_numpy(), short_sig.to_numpy()
 

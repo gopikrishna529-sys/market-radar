@@ -66,6 +66,7 @@ tr:hover .wl,.wl.on,.info .wl{opacity:1}.wl.on{color:var(--accent);border-color:
 .chips{display:flex;gap:6px;flex-wrap:wrap}.chip{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:2px 10px;cursor:pointer;font-size:12.5px}
 .info{display:flex;gap:22px;flex-wrap:wrap;align-items:baseline}.info .big{font-size:24px;font-weight:700}
 .tbl-wrap{overflow-x:auto}
+table.trades tbody tr{cursor:pointer} tr.sel td{background:#1d2a3a!important}
 .loading{color:var(--muted);padding:30px;text-align:center}
 .Leading{color:var(--leading)}.Improving{color:var(--improving)}.Weakening{color:var(--weakening)}.Lagging{color:var(--lagging)}
 </style>
@@ -109,7 +110,8 @@ const WL = {
 function starHTML(t){ const on=WL.has(t); return `<span class="wl ${on?"on":""}" data-star="${esc(t)}" title="Add to / remove from watchlist">${on?"✓ Watching":"+ Watch"}</span>`; }
 document.addEventListener("click", e => {
   const s = e.target.closest("[data-star]"); if(s){ e.stopPropagation(); const on = WL.toggle(s.dataset.star); document.querySelectorAll(`[data-star="${CSS.escape(s.dataset.star)}"]`).forEach(x=>{x.classList.toggle("on",on);x.textContent=on?"✓ Watching":"+ Watch";}); return; }
-  const t = e.target.closest("[data-tk]"); if(t){ location.hash = "#chart/" + encodeURIComponent(t.dataset.tk); }
+  const tr = e.target.closest("[data-trade]"); if(tr){ const [tk,d]=tr.dataset.trade.split("|"); location.hash=`#chart/${encodeURIComponent(tk)}/${d}`; return; }
+  const t = e.target.closest("[data-tk]"); if(t){ location.hash = "#chart/" + encodeURIComponent(t.dataset.tk) + (t.dataset.d?"/"+t.dataset.d:""); }
 });
 
 /* ------------------------------------------------------------------ chart engine (canvas, TradingView-style) */
@@ -135,6 +137,8 @@ class RChart{
   }
   reset(count){ this.to=this.n-1+3; this.from=this.to-Math.min(count,this.n+3); }
   setBars(count){ this.reset(count); this.draw(); }
+  highlight(a,b){ this.hl=[a,b]; this.draw(); }
+  centerOn(i,span){ span=span||(this.to-this.from); this.from=i-span/2; this.to=i+span/2; this.clamp(); this.draw(); }
   clamp(){ const span=this.to-this.from; if(this.to>this.n-1+30){this.to=this.n-1+30;this.from=this.to-span;} if(this.from<-30){this.from=-30;this.to=this.from+span;} }
   hidx(){ return this.hover==null?null:Math.max(0,Math.min(this.n-1,this.hover)); }
   iOf(x){ return this.from+x/this.plotW*(this.to-this.from); }
@@ -159,6 +163,9 @@ class RChart{
       if(!isFinite(mn)){mn=0;mx=1;} if(mx===mn){mx+=1;mn-=1;} const pad=(mx-mn)*0.06; mn-=pad; mx+=pad;
       const Y=v=>bot-(v-mn)/(mx-mn)*(bot-top); const fmt=p.fmt||fmtPx;
       this.paneGeo.push({y0,ph,Y,mn,mx,top,bot,fmt});
+      // highlighted trade
+      if(this.hl&&p===panes[0]){ const xa=this.xOf(this.hl[0]-.5), xb=this.xOf(this.hl[1]+.5); g.fillStyle="rgba(76,159,254,.13)"; g.fillRect(xa,0,xb-xa,avail);
+        g.strokeStyle="rgba(76,159,254,.8)"; g.setLineDash([5,4]); g.beginPath(); g.moveTo(Math.round(this.xOf(this.hl[0]))+.5,0); g.lineTo(Math.round(this.xOf(this.hl[0]))+.5,avail); g.stroke(); g.setLineDash([]); }
       // bands
       for(const b of (p.bands||[])){ if(b[1]<i0||b[0]>i1) continue; const xa=this.xOf(b[0]-.5), xb=this.xOf(b[1]+.5); g.fillStyle=b[2]; g.fillRect(Math.max(0,xa),y0,Math.min(plotW,xb)-Math.max(0,xa),ph); }
       // grid + axis labels
@@ -181,11 +188,17 @@ class RChart{
           g.stroke(); g.lineWidth=1;
           if(s.type==="area"&&first!=null){ g.lineTo(last,Y(s.base??0)); g.lineTo(first,Y(s.base??0)); g.closePath(); g.fillStyle=s.fill; g.fill(); } }
       }
-      // markers
+      // markers (stacked when several share a candle)
+      const used={};
       for(const m of (p.markers||[])){ if(m.i<i0||m.i>i1) continue; const x=this.xOf(m.i); const s=p.series[0]; const below=m.pos==="below";
-        const yb=below?Y(s.l[m.i])+8:Y(s.h[m.i])-8; g.fillStyle=m.color; g.beginPath();
-        if(below){g.moveTo(x,yb);g.lineTo(x-5,yb+8);g.lineTo(x+5,yb+8);} else {g.moveTo(x,yb);g.lineTo(x-5,yb-8);g.lineTo(x+5,yb-8);} g.fill();
-        if(m.text&&bw>3){ g.textAlign="center"; g.fillText(m.text,x,below?yb+17:yb-17); } }
+        const z=m.size||8, key=m.i+(below?"b":"a"), off=used[key]||0; used[key]=off+z*2+(m.text?14:2);
+        const yb=below?Y(s.l[m.i])+6+off:Y(s.h[m.i])-6-off; const up=m.dir?m.dir==="up":below;
+        g.fillStyle=m.color; g.beginPath();
+        if(up){ const t=below?yb:yb-z*1.6; g.moveTo(x,t); g.lineTo(x-z,t+z*1.6); g.lineTo(x+z,t+z*1.6); }
+        else { const t=below?yb+z*1.6:yb; g.moveTo(x,t); g.lineTo(x-z,t-z*1.6); g.lineTo(x+z,t-z*1.6); }
+        g.closePath(); g.fill(); if(m.stroke){ g.strokeStyle="#0b0f14"; g.lineWidth=1; g.stroke(); }
+        if(m.text){ g.font="700 11px -apple-system,Segoe UI,Arial"; g.textAlign="center"; const ty=below?yb+z*1.6+9:yb-z*1.6-8;
+          const tw3=g.measureText(m.text).width+8; g.fillStyle="rgba(11,15,20,.8)"; g.fillRect(x-tw3/2,ty-7,tw3,14); g.fillStyle=m.color; g.fillText(m.text,x,ty); g.font="11px -apple-system,Segoe UI,Arial"; } }
       g.restore();
       // last-value tags
       for(const s of p.series){ if(!s.tag) continue; let v=null; for(let i=this.n-1;i>=0;i--){ const x=s.type==="candle"?s.c[i]:s.v[i]; if(x!=null){v=x;break;} } if(v==null) continue;
@@ -225,10 +238,12 @@ function dmi(h,l,c,len=14){ const n=c.length, pdm=new Array(n).fill(null), mdm=n
   const t=rma(tr,len), p=rma(pdm,len), m=rma(mdm,len), plus=[], minus=[], dx=[];
   for(let i=0;i<n;i++){ if(t[i]==null||!t[i]){plus.push(null);minus.push(null);dx.push(null);continue;} const a=100*p[i]/t[i], b=100*m[i]/t[i]; plus.push(a); minus.push(b); dx.push(100*Math.abs(a-b)/((a+b)||1)); }
   return {plus,minus,adx:rma(dx,len)}; }
-function trendStates(c){ const ef=emaArr(c,EMA.fast), em=emaArr(c,EMA.mid), es=emaArr(c,EMA.slow), L=EMA.rising_lookback, st=new Array(c.length).fill(0);
-  for(let i=L;i<c.length;i++){ if([c[i],ef[i],em[i],es[i],ef[i-L],em[i-L]].some(v=>v==null)) continue;
-    if(c[i]>ef[i]&&ef[i]>em[i]&&em[i]>es[i]&&ef[i]>ef[i-L]&&em[i]>em[i-L]) st[i]=1; else if(c[i]<ef[i]&&ef[i]<em[i]&&em[i]<es[i]&&ef[i]<ef[i-L]&&em[i]<em[i-L]) st[i]=-1; }
-  return {ef,em,es,st}; }
+const EP=[...EMA.periods].sort((a,b)=>a-b), EMA_TXT=EP.map(p=>"EMA"+p).join(" > ");
+const EMA_COL={9:"#00bcd4",10:"#00bcd4",20:"#4c9ffe",21:"#4c9ffe",50:"#f5a623",100:"#ec407a",150:"#ec407a",200:"#c77dff"};
+function trendStates(c){ const e={}; for(const p of new Set([...EP,EMA.exit])) e[p]=emaArr(c,p); const st=new Array(c.length).fill(0);
+  for(let i=0;i<c.length;i++){ const v=EP.map(p=>e[p][i]); if(v.some(x=>x==null)) continue; let up=true,dn=true;
+    for(let k=0;k<v.length-1;k++){ if(!(v[k]>v[k+1])) up=false; if(!(v[k]<v[k+1])) dn=false; } st[i]=up?1:dn?-1:0; }
+  return {e,st}; }
 
 /* ------------------------------------------------------------------ shared data */
 let STOCKS=null; async function stocks(){ if(STOCKS) return STOCKS; const s=await J("data/stocks.json"); const f=s.fields; STOCKS={date:s.date,map:{},list:[]};
@@ -247,7 +262,7 @@ async function viewPortfolio(){
   m.innerHTML=`
   <div class="row" style="justify-content:space-between;margin-bottom:14px">
     <div><h2>EMA Trend Portfolio <span class="muted" style="font-weight:400;font-size:14px">· backtest ${fd(md.dates[0])} → ${fd(md.dates.at(-1))}</span></h2>
-    <div class="note">Enter at the next open after the EMA trend is set (Close &gt; EMA${EMA.fast} &gt; EMA${EMA.mid} &gt; EMA${EMA.slow}, EMAs rising; shorts the mirror image). Exit at the next open after a close beyond the EMA${EMA.mid}.
+    <div class="note">Enter at the next open after the EMA trend is set (${EMA_TXT.replace(/>/g,"&gt;")}; shorts the reverse order). Exit at the next open after a close beyond the EMA${EMA.exit}.
     ${b.settings.max_positions} equal slots · ${b.settings.cost_per_side_pct}% cost per side · stocks ≥ $${b.settings.min_price} and ≥ ${(b.settings.min_avg_volume/1000).toFixed(0)}k avg volume · ${b.settings.stocks_tested.toLocaleString()} stocks tested.</div></div>
     <div class="seg" id="pfmode">${[["both","Long + Short"],["long","Long only"],["short","Short only"]].map(([k,l])=>`<button data-m="${k}" class="${PF.mode===k?"on":""}">${l}</button>`).join("")}</div>
   </div>
@@ -266,6 +281,9 @@ async function viewPortfolio(){
     ${kp("Exposure",(s.exposure??"–")+"%",`vol ${s.vol??"–"}% · Calmar ${s.calmar??"–"}`)}
   </div>
   <div class="card"><h3>Equity curve <small>account starts at 100 · strategy vs SPY buy &amp; hold · drag to pan, scroll to zoom, double-click to reset</small></h3><div id="eq"></div></div>
+  <div class="card"><h3>Signals by date <small>every entry the rules produced on a day · click a row to open it on the chart</small></h3>
+    <div class="row" style="margin-bottom:10px"><button id="sdp" title="Earlier date">‹</button><select id="sdsel"></select><button id="sdn" title="Later date">›</button><span class="muted" id="sdsum"></span></div>
+    <div class="tbl-wrap" id="sdtbl"></div></div>
   <div class="grid2">
     <div class="card"><h3>Monthly returns <small>portfolio, %</small></h3><div class="tbl-wrap" id="heat"></div></div>
     <div class="card"><h3>Trade return distribution <small>closed trades, % per trade</small></h3><div id="hist"></div></div>
@@ -315,7 +333,7 @@ async function viewPortfolio(){
 
   // MFE scatter
   drawScatter($("#mfe"),histRows);
-  $("#mfenote").innerHTML=`Average trade reached <b class="up">${pct(ts.avg_mfe)}</b> at its best and <b class="down">${pct(ts.avg_mae)}</b> at its worst, and closed at <b class="${cls(ts.avg_pnl)}">${pct(ts.avg_pnl)}</b>. Losing trades were up <b>${pct(ts.avg_mfe_losers)}</b> on average at some point — that is the cost of waiting for a close below EMA${EMA.mid}.`;
+  $("#mfenote").innerHTML=`Average trade reached <b class="up">${pct(ts.avg_mfe)}</b> at its best and <b class="down">${pct(ts.avg_mae)}</b> at its worst, and closed at <b class="${cls(ts.avg_pnl)}">${pct(ts.avg_pnl)}</b>. Losing trades were up <b>${pct(ts.avg_mfe_losers)}</b> on average at some point — that is the cost of waiting for a close below EMA${EMA.exit}.`;
 
   // next open orders
   const nx=b.next_open||{enter:[],exit:[]}; const en=nx.enter.filter(x=>inMode(x)), ex=nx.exit.filter(x=>inMode(x));
@@ -329,6 +347,24 @@ async function viewPortfolio(){
   // open positions
   const op=b.rows.filter(r=>r.status!=="closed"&&inPF(r)&&inMode(r));
   $("#openpos").innerHTML=op.length?tradeTable(sortRows(op,"pnl",-1),false):'<div class="empty">No open positions.</div>';
+  // signals by date
+  const pend=((b.next_open||{}).enter||[]).filter(inMode).map(x=>({ticker:x.ticker,side:x.side,signal:b.data_end,entry_date:null,entry:null,exit_date:null,exit:null,bars:null,pnl:null,mfe:null,mae:null,status:"pending",in_pf:"",score:x.score}));
+  const bySig={}; for(const r of [...b.rows.filter(inMode),...pend]) (bySig[r.signal] ||= []).push(r);
+  const sdates=Object.keys(bySig).sort().reverse(); if(!bySig[PF.sd]) PF.sd=sdates[0];
+  $("#sdsel").innerHTML=sdates.map(d=>{const a=bySig[d]; const nl=a.filter(x=>x.side==="long").length; return `<option value="${d}">${fd(d)} — ${nl} long · ${a.length-nl} short</option>`;}).join("");
+  const showSD=()=>{ const d=PF.sd; $("#sdsel").value=d; const a=sortRows(bySig[d]||[],"score",PF.mode==="short"?1:-1);
+    const taken=a.filter(inPF).length, pendN=a.filter(x=>x.status==="pending").length;
+    $("#sdsum").textContent=`${a.length} signals on ${fd(d)}`+(pendN?` · enter at the next open`:` · ${taken} taken by the portfolio`);
+    $("#sdtbl").innerHTML=a.length?`<table class="trades"><thead><tr><th>Ticker</th><th>Side</th><th class="r">RS score</th><th>Entry</th><th class="r">Entry px</th><th>Exit</th><th class="r">Days</th><th class="r">P&amp;L</th><th class="r">Max run-up</th><th class="r">Max drawdown</th><th>Portfolio</th></tr></thead><tbody>${a.map(r=>`<tr data-trade="${esc(r.ticker)}|${r.signal}" title="Show on the chart">
+      <td><span class="tk">${esc(r.ticker)}</span> ${starHTML(r.ticker)}</td><td><span class="pill ${r.side==="long"?"L":"S"}">${r.side==="long"?"Long":"Short"}</span></td>
+      <td class="r">${r.score==null?"–":r.score.toFixed(1)}</td><td>${r.status==="pending"?'<span class="gold">next open</span>':fd(r.entry_date)}</td><td class="r">${fmtPx(r.entry)}</td>
+      <td>${r.status==="closed"?fd(r.exit_date):r.status==="pending"?"–":'<span class="muted">open</span>'}</td><td class="r">${r.bars??"–"}</td>
+      <td class="r ${cls(r.pnl)}"><b>${pct(r.pnl)}</b></td><td class="r up">${pct(r.mfe)}</td><td class="r down">${pct(r.mae)}</td>
+      <td>${r.status==="pending"?'<span class="muted">pending</span>':inPF(r)?'<span class="up">✓ taken</span>':'<span class="muted">no free slot</span>'}</td></tr>`).join("")}</tbody></table>`:'<div class="empty">No signals on this date.</div>'; };
+  $("#sdsel").onchange=e=>{PF.sd=e.target.value;showSD();};
+  $("#sdp").onclick=()=>{const i=sdates.indexOf(PF.sd); if(i<sdates.length-1){PF.sd=sdates[i+1];showSD();}};
+  $("#sdn").onclick=()=>{const i=sdates.indexOf(PF.sd); if(i>0){PF.sd=sdates[i-1];showSD();}};
+  showSD();
   renderLog();
   const upd=()=>{PF.page=0;renderLog();};
   $("#tq").oninput=e=>{PF.f.q=e.target.value.toUpperCase();upd();}; $("#tside").onchange=e=>{PF.f.side=e.target.value;upd();};
@@ -337,7 +373,7 @@ async function viewPortfolio(){
 const TCOLS=[["ticker","Ticker"],["side","Side"],["signal","Signal"],["entry_date","Entry"],["entry","Entry px"],["exit_date","Exit"],["exit","Exit px"],["bars","Days"],["pnl","P&L"],["mfe","Max run-up"],["mae","Max drawdown"],["status","Status"]];
 function tradeTable(rows,sortable=true){
   const h=TCOLS.map(([k,l])=>`<th ${sortable?`data-sk="${k}"`:""} class="${["entry","exit","bars","pnl","mfe","mae"].includes(k)?"r":""}">${l}${sortable&&PF.sort.k===k?(PF.sort.d>0?" ▲":" ▼"):""}</th>`).join("");
-  return `<table><thead><tr>${h}</tr></thead><tbody>${rows.map(r=>`<tr>
+  return `<table class="trades"><thead><tr>${h}</tr></thead><tbody>${rows.map(r=>`<tr data-trade="${esc(r.ticker)}|${r.signal}" title="Show this trade on the chart">
     <td><span class="tk" data-tk="${esc(r.ticker)}">${esc(r.ticker)}</span> ${starHTML(r.ticker)}</td>
     <td><span class="pill ${r.side==="long"?"L":"S"}">${r.side==="long"?"Long":"Short"}</span></td>
     <td class="muted">${fd(r.signal)}</td><td>${fd(r.entry_date)}</td><td class="r">${fmtPx(r.entry)}</td>
@@ -370,7 +406,7 @@ function drawScatter(cv,rows){
 
 /* ------------------------------------------------------------------ CHART */
 let CH={ticker:null,chart:null,bars:252};
-async function viewChart(ticker){
+async function viewChart(ticker,focus){
   const st=await stocks(); ticker=(ticker||CH.ticker||localStorage.getItem("mr_last")||"SPY").toUpperCase(); CH.ticker=ticker; try{localStorage.setItem("mr_last",ticker);}catch(e){}
   const recent=JSON.parse(localStorage.getItem("mr_recent")||"[]").filter(x=>x!==ticker); recent.unshift(ticker); try{localStorage.setItem("mr_recent",JSON.stringify(recent.slice(0,10)));}catch(e){}
   const m=$("#main"); const s=st.map[ticker];
@@ -380,14 +416,17 @@ async function viewChart(ticker){
       <div class="seg" id="rng">${[["3M",63],["6M",126],["1Y",252],["2Y",504],["All",99999]].map(([l,v])=>`<button data-v="${v}" class="${CH.bars===v?"on":""}">${l}</button>`).join("")}</div>
       <div class="chips">${recent.slice(1,9).map(t=>`<span class="chip" data-tk="${esc(t)}">${esc(t)}</span>`).join("")}</div></div>
     <div class="card" style="padding:12px 14px"><div class="info" id="cinfo"></div></div>
-    <div class="card" style="padding:8px"><div id="cv"></div></div>
-    <div class="card"><h3>Backtest trades in ${esc(ticker)}</h3><div class="tbl-wrap" id="ctr"><div class="loading">…</div></div></div>`;
+    <div class="card" style="padding:8px"><div id="cv"></div>
+      <div class="note" style="padding:6px 8px 2px"><span style="color:#26a69a">▲ BUY</span> / <span style="color:#ef5350">▼ SHORT</span> = strategy entry (next open after the EMA trend is set) ·
+      <span class="gold">EXIT</span> = position closed, with its result · <span style="color:#7fc4ff">small ▲</span> = close above the previous 20-day high ·
+      green / red shading = EMA uptrend / downtrend (${EMA_TXT})</div></div>
+    <div class="card"><h3>Backtest trades in ${esc(ticker)} <small>click a trade to jump to it on the chart</small></h3><div class="tbl-wrap" id="ctr"><div class="loading">…</div></div></div>`;
   const dl=$("#tklist"); dl.innerHTML=st.list.map(x=>`<option value="${esc(x.ticker)}">${esc(x.name)}</option>`).join("");
   $("#cf").onsubmit=e=>{e.preventDefault(); const q=$("#cq").value.trim().toUpperCase(); const hit=st.map[q]?q:(st.list.find(x=>x.name.toUpperCase().includes(q))||{}).ticker; location.hash="#chart/"+encodeURIComponent(hit||q);};
   document.querySelectorAll("#rng button").forEach(b=>b.onclick=()=>{CH.bars=+b.dataset.v; document.querySelectorAll("#rng button").forEach(x=>x.classList.toggle("on",x===b)); CH.chart&&CH.chart.setBars(CH.bars);});
   $("#cinfo").innerHTML=s?`<span class="big">${esc(ticker)}</span> ${starHTML(ticker)} <span class="muted">${esc(s.name)}</span>
      <span class="big">${fmtPx(s.close)}</span><span class="${cls(s.chg)}">${pct(s.chg)}</span> ${stateHTML(s.state,s.days)}
-     <span class="muted">RS rating <b style="color:var(--text)">${s.rs??"–"}</b></span><span class="muted">vs EMA${EMA.mid} <b class="${cls(s.vs_ema50)}">${pct(s.vs_ema50,1)}</b></span>
+     <span class="muted">RS rating <b style="color:var(--text)">${s.rs??"–"}</b></span><span class="muted">vs EMA${EMA.exit} <b class="${cls(s.vs_ema50)}">${pct(s.vs_ema50,1)}</b></span>
      <span class="muted">Avg vol <b style="color:var(--text)">${s.avg_vol_k!=null?(s.avg_vol_k>=1000?(s.avg_vol_k/1000).toFixed(1)+"M":s.avg_vol_k+"k"):"–"}</b></span><span class="muted">as of ${fd(st.date)}</span>`
      :`<span class="big">${esc(ticker)}</span> <span class="muted">No chart data for this ticker (only stocks ≥ $1 with ≥ 50k average volume, plus major ETFs).</span>`;
   if(!s){ $("#cv").innerHTML=""; $("#ctr").innerHTML=""; return; }
@@ -396,19 +435,28 @@ async function viewChart(ticker){
   const e12=emaArr(c,12), e26=emaArr(c,26), macd=c.map((_,i)=>e12[i]!=null&&e26[i]!=null?e12[i]-e26[i]:null);
   const sigRaw=emaArr(macd.map(x=>x),9), hist=macd.map((x,i)=>x!=null&&sigRaw[i]!=null?x-sigRaw[i]:null); const dm=dmi(h,l,c,14);
   const bands=[]; let cur=0,st0=0; for(let i=0;i<=t.st.length;i++){ const s2=i<t.st.length?t.st[i]:99; if(s2!==cur){ if(cur!==0) bands.push([st0,i-1,cur>0?"rgba(38,166,154,.07)":"rgba(239,83,80,.07)"]); cur=s2; st0=i; } }
-  let markers=[], trades=[]; try{ const bt=await backtest(); trades=bt.rows.filter(r=>r.ticker===ticker); const idx={}; dates.forEach((d,i)=>idx[d]=i);
-    for(const r of trades){ const ei=idx[r.entry_date]; if(ei!=null) markers.push({i:ei,pos:r.side==="long"?"below":"above",color:r.side==="long"?"#26a69a":"#ef5350",text:r.side==="long"?"Buy":"Short"});
-      if(r.status==="closed"){ const xi=idx[r.exit_date]; if(xi!=null) markers.push({i:xi,pos:r.side==="long"?"above":"below",color:"#f5c542",text:pct(r.pnl,1)}); } } }catch(e){}
+  const idx={}; dates.forEach((d,i)=>idx[d]=i);
+  let markers=[], trades=[]; try{ const bt=await backtest(); trades=bt.rows.filter(r=>r.ticker===ticker);
+    for(const r of trades){ const ei=idx[r.entry_date], L=r.side==="long"; if(ei!=null) markers.push({i:ei,pos:L?"below":"above",dir:L?"up":"down",size:9,stroke:true,color:L?"#26a69a":"#ef5350",text:L?"BUY":"SHORT"});
+      if(r.status==="closed"){ const xi=idx[r.exit_date]; if(xi!=null) markers.push({i:xi,pos:L?"above":"below",dir:L?"down":"up",size:9,stroke:true,color:"#f5c542",text:"EXIT "+pct(r.pnl,1)}); } } }catch(e){}
+  for(let i=20;i<c.length;i++){ let hh=-Infinity; for(let k=i-20;k<i;k++) if(h[k]!=null&&h[k]>hh) hh=h[k];   // close above previous 20-day high
+    if(c[i]!=null&&c[i]>hh) markers.push({i,pos:"above",dir:"up",size:4,color:"#7fc4ff"}); }
+  if(CH.chart) CH.chart.ro.disconnect();
   CH.chart=new RChart($("#cv"),{dates,height:Math.max(560,Math.min(860,window.innerHeight-230)),initial:CH.bars,panes:[
     {w:3.2,title:ticker+" · D",bands,markers,series:[{type:"candle",o,h,l,c,tag:true,tagColor:c.at(-1)>=o.at(-1)?"#26a69a":"#ef5350"},
-      {type:"line",name:"EMA"+EMA.fast,v:t.ef,color:"#4c9ffe",width:1.4},{type:"line",name:"EMA"+EMA.mid,v:t.em,color:"#f5a623",width:1.6},
-      {type:"line",name:"EMA"+EMA.slow,v:t.es,color:"#c77dff",width:1.8},{type:"volume",v,o,c,overlay:true,nolegend:true}]},
+      ...EP.map((p,k)=>({type:"line",name:"EMA"+p,v:t.e[p],color:EMA_COL[p]||["#00bcd4","#4c9ffe","#f5a623","#ec407a","#c77dff"][k%5],width:1.2+k*.2})),
+      {type:"volume",v,o,c,overlay:true,nolegend:true}]},
     {w:1,title:"MACD 12 26 9",fmt:x=>x.toFixed(Math.abs(x)<1?3:2),refs:[{v:0,inRange:true}],series:[
       {type:"hist",name:"Hist",v:hist,color:(x,i)=>x>=0?(i>0&&hist[i-1]!=null&&x<hist[i-1]?"rgba(38,166,154,.45)":"#26a69a"):(i>0&&hist[i-1]!=null&&x>hist[i-1]?"rgba(239,83,80,.45)":"#ef5350")},
       {type:"line",name:"MACD",v:macd,color:"#4c9ffe"},{type:"line",name:"Signal",v:sigRaw,color:"#f5a623"}]},
     {w:1,title:"DMI 14",fmt:x=>x.toFixed(1),refs:[{v:20,color:"#3a4654"}],series:[
       {type:"line",name:"+DI",v:dm.plus,color:"#26a69a"},{type:"line",name:"−DI",v:dm.minus,color:"#ef5350"},{type:"line",name:"ADX",v:dm.adx,color:"#f5c542",width:1.8}]}]});
   $("#ctr").innerHTML=trades.length?tradeTable(sortRows(trades,"entry_date",-1),false):'<div class="empty">The strategy has not traded this ticker in the backtest period.</div>';
+  if(focus){ const tr=trades.find(r=>r.signal===focus); const si=idx[focus]??idx[tr?.entry_date];
+    if(si!=null){ const ex=tr?(tr.status==="closed"?idx[tr.exit_date]:dates.length-1):si+1; CH.chart.highlight(si,ex??si+1);
+      CH.chart.centerOn(si,Math.max(CH.bars<99999?CH.bars:252,((ex??si)-si)*2+40)); }
+    document.querySelectorAll("#ctr tr[data-trade]").forEach(r=>r.classList.toggle("sel",r.dataset.trade===`${ticker}|${focus}`));
+    $("#cv").scrollIntoView({behavior:"smooth",block:"start"}); }
 }
 
 /* ------------------------------------------------------------------ WATCHLIST */
@@ -427,7 +475,7 @@ async function viewWatchlist(){
   $("#tklist").innerHTML=st.list.map(x=>`<option value="${esc(x.ticker)}">${esc(x.name)}</option>`).join("");
   const rows=list.map(t=>({...(st.map[t]||{ticker:t,name:"(no data)"}),pos:openPos[t]}));
   const sk=(viewWatchlist.sort ||= {k:"ticker",d:1}); const sorted=sortRows(rows,sk.k,sk.d);
-  const cols=[["ticker","Ticker"],["name","Name"],["close","Close"],["chg","Chg %"],["rs","RS"],["state","EMA trend"],["vs_ema50","vs EMA"+EMA.mid],["pos","Strategy position"],["","",]];
+  const cols=[["ticker","Ticker"],["name","Name"],["close","Close"],["chg","Chg %"],["rs","RS"],["state","EMA trend"],["vs_ema50","vs EMA"+EMA.exit],["pos","Strategy position"],["","",]];
   $("#wtbl").innerHTML=rows.length?`<table><thead><tr>${cols.map(([k,l])=>`<th data-k="${k}">${l}${sk.k===k&&k?(sk.d>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>${sorted.map(r=>`<tr>
      <td><span class="tk" data-tk="${esc(r.ticker)}">${esc(r.ticker)}</span></td><td class="nm">${esc(r.name)}</td><td>${fmtPx(r.close)}</td>
      <td class="${cls(r.chg)}">${pct(r.chg)}</td><td>${r.rs??"–"}</td><td>${r.state!==undefined?stateHTML(r.state,r.days):""}</td><td class="${cls(r.vs_ema50)}">${pct(r.vs_ema50,1)}</td>
@@ -501,11 +549,11 @@ function rrg(rows){
 
 /* ------------------------------------------------------------------ router */
 async function route(){
-  const [r,arg]=(location.hash.slice(1)||"portfolio").split("/");
+  const [r,arg,arg2]=(location.hash.slice(1)||"portfolio").split("/");
   document.querySelectorAll("#nav a").forEach(a=>a.classList.toggle("on",a.dataset.r===r));
   if(CH.chart&&r!=="chart"){ CH.chart.ro.disconnect(); CH.chart=null; }
   try{
-    if(r==="scanner") await viewScanner(); else if(r==="chart") await viewChart(arg&&decodeURIComponent(arg));
+    if(r==="scanner") await viewScanner(); else if(r==="chart") await viewChart(arg&&decodeURIComponent(arg),arg2);
     else if(r==="watchlist") await viewWatchlist(); else if(r==="rotation") await viewRotation(); else await viewPortfolio();
   }catch(e){ console.error(e); $("#main").innerHTML=`<div class="empty">Could not load this page (${esc(e.message)}).</div>`; }
 }
