@@ -1,0 +1,96 @@
+name: Daily stock scan
+
+on:
+  schedule:
+    # Times are UTC. The free Massive plan only releases a day's data after that day ends,
+    # so there are three tries; whichever run finds the new day sends the email, the rest do nothing.
+    #   22:30 UTC = 5:30 pm New York (winter)
+    #   02:00 UTC = 9:00 pm New York
+    #   05:30 UTC = 12:30 am New York (data is always ready by then)
+    - cron: "30 22 * * 1-5"
+    - cron: "0 2 * * 2-6"
+    - cron: "30 5 * * 2-6"
+  workflow_dispatch:        # "Run workflow" button: also downloads older history and rebuilds everything
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  actions: read
+
+concurrency:
+  group: daily-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Python packages
+        timeout-minutes: 12
+        run: |
+          # --no-compile skips byte-compiling thousands of pandas files (the slow part);
+          # each attempt is capped at 3 minutes and retried, so a stuck install cannot hang the run
+          for i in 1 2 3; do
+            timeout 180 python -m pip install --no-compile --only-binary=:all: --disable-pip-version-check -q -r requirements.txt && break
+            echo "install attempt $i failed or timed out - retrying"
+          done
+          python -c "import pandas, numpy, requests, yaml; print('packages ready: pandas', pandas.__version__)"
+
+      - name: Update data, scan, backtest, build website, send email
+        id: run
+        env:
+          PYTHONUNBUFFERED: "1"
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+        run: |
+          python run.py ${{ github.event_name == 'workflow_dispatch' && '--force' || '' }}
+          if [ -f site/index.html ]; then echo "site=yes" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Save new data to the repository
+        if: always()
+        run: |
+          git config user.name "scanner-bot"
+          git config user.email "scanner-bot@users.noreply.github.com"
+          git rm -r -q --cached --ignore-unmatch site
+          git add -A -- . ':!site' ':!**/__pycache__' ':!results/backtest.json'
+          git diff --cached --quiet || git commit -m "Scan $(date -u +%Y-%m-%d)"
+          for i in 1 2 3; do
+            git pull --rebase -X theirs origin main && git push && break
+            echo "push failed, retrying in 15s"; sleep 15
+          done
+          git push    # shows an error if all retries failed
+
+      - name: Prepare website
+        if: steps.run.outputs.site == 'yes'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Publish website
+        if: steps.run.outputs.site == 'yes'
+        id: deploy
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+
+      - name: Wait before retrying publish
+        if: steps.run.outputs.site == 'yes' && steps.deploy.outcome == 'failure'
+        run: sleep 60
+
+      - name: Publish website (retry)
+        if: steps.run.outputs.site == 'yes' && steps.deploy.outcome == 'failure'
+        uses: actions/deploy-pages@v4
