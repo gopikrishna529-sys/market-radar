@@ -92,6 +92,8 @@ def build_email(result, bt=None):
         _strategy_section(bt, h2, site),
         f'<h2 {h2}>🚀 EMA trend + {CONFIG["breakout"]["lookback_days"]}-day breakout ({len(result["breakouts"])})</h2>',
         _stock_table(result["breakouts"], lim),
+        f'<h2 {h2}>🔻 EMA downtrend + {CONFIG["breakout"]["lookback_days"]}-day breakdown ({len(result.get("breakdowns", []))}, weakest RS first)</h2>',
+        _stock_table(result.get("breakdowns", []), lim),
     ]
     if b["chg"] is not None and b["chg"] < 0:
         parts += [f'<h2 {h2}>💪 Up while SPY was down ({len(result["rs_days"])})</h2>',
@@ -116,6 +118,7 @@ def build_email(result, bt=None):
         'Not financial advice.</p></div>',
     ]
     subject = (f"Market Radar {fmt_date(result['date'])}: {len(result['breakouts'])} breakouts, "
+               f"{len(result.get('breakdowns', []))} breakdowns, "
                f"{len(result['rs_days'])} RS-day, {len(result['rs_leaders'])} RS leaders")
     return subject, "".join(parts)
 

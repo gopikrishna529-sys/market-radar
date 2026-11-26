@@ -148,8 +148,9 @@ class RChart{
       const a=this.iOf(x); let span=(this.to-this.from)*f; span=Math.max(10,Math.min(this.n+40,span));
       this.from=a-(a-this.from)*span/(this.to-this.from); this.to=this.from+span; this.clamp(); this.draw();},{passive:false});
     c.addEventListener("pointerdown",e=>{ const [x,y]=pos(e); const pi=this.paneAt(y); c.setPointerCapture(e.pointerId);
+      if(this.meas&&this.meas.live&&this.meas.waiting){ this.meas.i1=Math.round(this.iOf(Math.min(x,this.plotW))); this.meas.v1=this.valAt(this.meas.pi,y); this.finishMeasure(); return; }
       if(x>this.plotW&&pi!=null){ this.axisDrag={pi,y,s0:this.ys[pi].s}; return; }
-      if((this.measureMode||e.shiftKey)&&pi!=null){ const i=Math.round(this.iOf(x)), v=this.valAt(pi,y); this.meas={pi,i0:i,v0:v,i1:i,v1:v,live:true}; this.draw(); return; }
+      if((this.measureMode||e.shiftKey)&&pi!=null){ const i=Math.round(this.iOf(x)), v=this.valAt(pi,y); this.meas={pi,i0:i,v0:v,i1:i,v1:v,live:true,sx:x,sy:y}; this.draw(); return; }
       if(this.meas&&!this.meas.live) this.meas=null;
       this.drag={x,y,f:this.from,t:this.to,pi,o0:pi!=null?this.ys[pi].o:0}; });
     c.addEventListener("pointermove",e=>{ const [x,y]=pos(e);
@@ -160,8 +161,9 @@ class RChart{
         const Y=this.ys[D.pi]; const g=this.paneGeo&&this.paneGeo[D.pi];
         if(Y&&g&&(Y.s!==1||Y.o!==0)) Y.o=D.o0+(y-D.y)/(g.bot-g.top)*Y.s; }
       this.hover=Math.round(this.iOf(Math.min(x,this.plotW))); this.my=y; this.draw(); this.cfg.onHover&&this.cfg.onHover(this.hidx()); });
-    const up=()=>{ this.drag=null; this.axisDrag=null; if(this.meas&&this.meas.live){ this.meas.live=false; if(this.meas.i0===this.meas.i1&&this.meas.v0===this.meas.v1) this.meas=null;
-        if(this.measureMode){ this.measureMode=false; this.cfg.onMeasureEnd&&this.cfg.onMeasureEnd(); } this.draw(); } };
+    const up=e=>{ this.drag=null; this.axisDrag=null; const M=this.meas; if(M&&M.live&&!M.waiting){ const [x,y]=pos(e);
+        if(Math.hypot(x-M.sx,y-M.sy)<5){ M.waiting=true; return; }        // a click (no drag): the next click sets the end point
+        this.finishMeasure(); } };
     c.addEventListener("pointerup",up); c.addEventListener("pointercancel",up);
     c.addEventListener("pointerleave",()=>{ if(this.drag||this.axisDrag||(this.meas&&this.meas.live)) return; this.hover=null; this.my=null; this.draw(); this.cfg.onHover&&this.cfg.onHover(null); });
     c.addEventListener("dblclick",e=>{ const [x,y]=pos(e); const pi=this.paneAt(y);
@@ -169,6 +171,8 @@ class RChart{
     this.onKey=e=>{ if(e.key==="Escape"&&this.meas){ this.meas=null; this.draw(); } }; window.addEventListener("keydown",this.onKey);
     this.ro=new ResizeObserver(()=>this.resize()); this.ro.observe(el);
   }
+  finishMeasure(){ const M=this.meas; if(!M) return; M.live=false; M.waiting=false;
+    if(this.measureMode){ this.measureMode=false; this.cfg.onMeasureEnd&&this.cfg.onMeasureEnd(); } this.draw(); }
   destroy(){ this.ro.disconnect(); window.removeEventListener("keydown",this.onKey); }
   reset(count){ this.to=this.n-1+3; this.from=this.to-Math.min(count,this.n+3); }
   setBars(count){ this.reset(count); this.draw(); }
@@ -402,12 +406,17 @@ async function viewPortfolio(){
   </div>
   <div class="card"><h3>Orders for the next open <small>from the latest close</small></h3><div id="orders"></div></div>
   <div class="card"><h3>Open positions <small>held in the portfolio now</small></h3><div class="tbl-wrap" id="openpos"></div></div>
-  <div class="card"><h3>Trade log</h3>
+  <div class="card"><h3>Trade log <small>click a column to sort · click a row to open the chart</small></h3>
+    <div class="row" style="margin-bottom:8px"><span class="muted">Entered:</span>
+      <div class="seg" id="trng">${[["1M",1],["3M",3],["6M",6],["1Y",12],["YTD","ytd"],["All",0]].map(([l,v])=>`<button data-v="${v}">${l}</button>`).join("")}</div>
+      <span class="muted">from</span><input type="date" id="tfrom" value="${PF.f.from||""}"><span class="muted">to</span><input type="date" id="tto" value="${PF.f.to||""}">
+      <button id="texp">⬇ Export these trades (CSV)</button></div>
     <div class="row" style="margin-bottom:10px">
       <input id="tq" placeholder="Filter ticker or company" value="${esc(PF.f.q)}" style="width:150px">
       <select id="tside"><option value="all">Long + short</option><option value="long">Long</option><option value="short">Short</option></select>
       <select id="tstat"><option value="all">All trades</option><option value="closed">Closed</option><option value="open">Open</option></select>
       <span class="muted" id="tcount"></span></div>
+    <div class="note" id="tsum" style="margin-bottom:8px"></div>
     <div class="tbl-wrap" id="tlog"></div><div class="pager" id="tpager"></div></div>`;
   $("#tside").value=PF.f.side; $("#tstat").value=PF.f.status;
   document.querySelectorAll("#pfmode button").forEach(x=>x.onclick=()=>{PF.mode=x.dataset.m;viewPortfolio();});
@@ -454,33 +463,44 @@ async function viewPortfolio(){
 
   // open positions
   const op=b.rows.filter(r=>r.status!=="closed"&&inPF(r)&&inMode(r));
-  $("#openpos").innerHTML=op.length?tradeTable(sortRows(op,"pnl",-1),false):'<div class="empty">No open positions.</div>';
+  sortedTable($("#openpos"),op,PF.ops ||= {k:"pnl",d:-1},"No open positions.");
   // signals by date
   const pend=((b.next_open||{}).enter||[]).filter(inMode).map(x=>({ticker:x.ticker,side:x.side,signal:b.data_end,entry_date:null,entry:null,exit_date:null,exit:null,bars:null,pnl:null,mfe:null,mae:null,status:"pending",in_pf:"",score:x.score}));
   const bySig={}; for(const r of [...b.rows.filter(inMode),...pend]) (bySig[r.signal] ||= []).push(r);
   const sdates=Object.keys(bySig).sort().reverse(); if(!bySig[PF.sd]) PF.sd=sdates[0];
   $("#sdsel").innerHTML=sdates.map(d=>{const a=bySig[d]; const nl=a.filter(x=>x.side==="long").length; return `<option value="${d}">${fd(d)} — ${nl} long · ${a.length-nl} short</option>`;}).join("");
-  const showSD=()=>{ const d=PF.sd; $("#sdsel").value=d; const a=sortRows((bySig[d]||[]).filter(r=>matchQ(PF.sdq,r.ticker,(STOCKS&&STOCKS.map[r.ticker]||{}).name)),"score",PF.mode==="short"?1:-1);
+  const showSD=()=>{ const d=PF.sd; $("#sdsel").value=d; const SS=(PF.sds ||= {k:"score",d:-1}); const a=sortRows((bySig[d]||[]).filter(r=>matchQ(PF.sdq,r.ticker,(STOCKS&&STOCKS.map[r.ticker]||{}).name)),SS.k,SS.d);
     const taken=a.filter(inPF).length, pendN=a.filter(x=>x.status==="pending").length;
     $("#sdsum").textContent=`${a.length} signals on ${fd(d)}`+(pendN?` · enter at the next open`:``);
-    $("#sdtbl").innerHTML=a.length?`<table class="trades"><thead><tr><th>Ticker</th><th>Side</th><th class="r">RS score</th><th>Entry</th><th class="r">Entry px</th><th>Exit</th><th class="r">Days</th><th class="r">P&amp;L</th><th class="r">Max run-up</th><th class="r">Max drawdown</th><th>Status</th></tr></thead><tbody>${a.map(r=>`<tr data-trade="${esc(r.ticker)}|${r.signal}" title="Show on the chart">
+    $("#sdtbl").innerHTML=a.length?`<table class="trades"><thead><tr>${sortHead([["ticker","Ticker"],["side","Side"],["score","RS score"],["entry_date","Entry"],["entry","Entry px"],["exit_date","Exit"],["bars","Days"],["pnl","P&amp;L"],["mfe","Max run-up"],["mae","Max drawdown"],["status","Status"]],SS,["score","entry","bars","pnl","mfe","mae"])}</tr></thead><tbody>${a.map(r=>`<tr data-trade="${esc(r.ticker)}|${r.signal}" title="Show on the chart">
       <td><span class="tk">${esc(r.ticker)}</span> ${starHTML(r.ticker)}</td><td><span class="pill ${r.side==="long"?"L":"S"}">${r.side==="long"?"Long":"Short"}</span></td>
       <td class="r">${r.score==null?"–":r.score.toFixed(1)}</td><td>${r.status==="pending"?'<span class="gold">next open</span>':fd(r.entry_date)}</td><td class="r">${fmtPx(r.entry)}</td>
       <td>${r.status==="closed"?fd(r.exit_date):r.status==="pending"?"–":'<span class="muted">open</span>'}</td><td class="r">${r.bars??"–"}</td>
       <td class="r ${cls(r.pnl)}"><b>${pct(r.pnl)}</b></td><td class="r up">${pct(r.mfe)}</td><td class="r down">${pct(r.mae)}</td>
-      <td>${r.status==="pending"?'<span class="gold">enter next open</span>':r.status==="closed"?'<span class="muted">closed</span>':'<span class="up">open</span>'}</td></tr>`).join("")}</tbody></table>`:'<div class="empty">No signals on this date.</div>'; };
+      <td>${r.status==="pending"?'<span class="gold">enter next open</span>':r.status==="closed"?'<span class="muted">closed</span>':'<span class="up">open</span>'}</td></tr>`).join("")}</tbody></table>`:'<div class="empty">No signals on this date.</div>'; bindSort($("#sdtbl"),SS,showSD); };
   $("#sdsel").onchange=e=>{PF.sd=e.target.value;showSD();}; $("#sdq").oninput=e=>{PF.sdq=e.target.value;showSD();};
   $("#sdp").onclick=()=>{const i=sdates.indexOf(PF.sd); if(i<sdates.length-1){PF.sd=sdates[i+1];showSD();}};
   $("#sdn").onclick=()=>{const i=sdates.indexOf(PF.sd); if(i>0){PF.sd=sdates[i-1];showSD();}};
   showSD();
   renderLog();
   const upd=()=>{PF.page=0;renderLog();};
+  const rngOn=()=>document.querySelectorAll("#trng button").forEach(x=>x.classList.toggle("on",x.dataset.v===String(PF.f.preset??0)));
+  document.querySelectorAll("#trng button").forEach(x=>x.onclick=()=>{ const v=x.dataset.v, end=b.data_end; PF.f.preset=v; PF.f.to="";
+    if(v==="0"){ PF.f.from=""; } else if(v==="ytd"){ PF.f.from=end.slice(0,4)+"-01-01"; } else { const d=new Date(end+"T00:00:00Z"); d.setUTCMonth(d.getUTCMonth()-(+v)); PF.f.from=d.toISOString().slice(0,10); }
+    $("#tfrom").value=PF.f.from; $("#tto").value=PF.f.to; rngOn(); upd(); });
+  $("#tfrom").onchange=e=>{PF.f.from=e.target.value;PF.f.preset="c";rngOn();upd();}; $("#tto").onchange=e=>{PF.f.to=e.target.value;PF.f.preset="c";rngOn();upd();}; rngOn();
+  $("#texp").onclick=()=>{ const st2=STOCKS||{map:{}}, rows=sortRows(logRows(),PF.sort.k,PF.sort.d);
+    const out=[["ticker","name","side","signal_date","entry_date","entry_price","exit_date","exit_price","days","pnl_pct","max_runup_pct","max_drawdown_pct","status","rs_score"]];
+    for(const r of rows) out.push([r.ticker,(st2.map[r.ticker]||{}).name||"",r.side,fd(r.signal),fd(r.entry_date),r.entry,r.status==="closed"?fd(r.exit_date):"",r.status==="closed"?r.exit:"",r.bars,r.pnl,r.mfe,r.mae,r.status,r.score]);
+    saveCSV(`trades_${fd(PF.f.from||rows.reduce((m,r)=>r.entry_date<m?r.entry_date:m,"9999"))}_to_${fd(PF.f.to||b.data_end)}.csv`,out); };
   $("#tq").oninput=e=>{PF.f.q=e.target.value.toUpperCase();upd();}; $("#tside").onchange=e=>{PF.f.side=e.target.value;upd();};
   $("#tstat").onchange=e=>{PF.f.status=e.target.value;upd();}; 
 }
 const TCOLS=[["ticker","Ticker"],["side","Side"],["signal","Signal"],["entry_date","Entry"],["entry","Entry px"],["exit_date","Exit"],["exit","Exit px"],["bars","Days"],["pnl","P&L"],["mfe","Max run-up"],["mae","Max drawdown"],["status","Status"]];
-function tradeTable(rows,sortable=true){
-  const h=TCOLS.map(([k,l])=>`<th ${sortable?`data-sk="${k}"`:""} class="${["entry","exit","bars","pnl","mfe","mae"].includes(k)?"r":""}">${l}${sortable&&PF.sort.k===k?(PF.sort.d>0?" ▲":" ▼"):""}</th>`).join("");
+function sortHead(cols,st,right=[]){ return cols.map(([k,l])=>`<th ${st&&k?`data-sk="${k}"`:""} class="${right.includes(k)?"r":""}">${l}${st&&st.k===k?(st.d>0?" ▲":" ▼"):""}</th>`).join(""); }
+function bindSort(box,st,redraw){ box.querySelectorAll("th[data-sk]").forEach(th=>th.onclick=()=>{ const k=th.dataset.sk; st.d=st.k===k?-st.d:1; st.k=k; redraw(); }); }
+function tradeTable(rows,st=null){
+  const h=sortHead(TCOLS,st,["entry","exit","bars","pnl","mfe","mae"]);
   return `<table class="trades"><thead><tr>${h}</tr></thead><tbody>${rows.map(r=>`<tr data-trade="${esc(r.ticker)}|${r.signal}" title="Show this trade on the chart">
     <td><span class="tk" data-tk="${esc(r.ticker)}">${esc(r.ticker)}</span> ${starHTML(r.ticker)}</td>
     <td><span class="pill ${r.side==="long"?"L":"S"}">${r.side==="long"?"Long":"Short"}</span></td>
@@ -488,15 +508,23 @@ function tradeTable(rows,sortable=true){
     <td>${r.status==="closed"?fd(r.exit_date):'<span class="muted">open</span>'}</td><td class="r">${fmtPx(r.exit)}</td><td class="r">${r.bars}</td>
     <td class="r ${cls(r.pnl)}"><b>${pct(r.pnl)}</b></td><td class="r up">${pct(r.mfe)}</td><td class="r down">${pct(r.mae)}</td>
     <td class="muted">${r.status==="closed"?"closed":r.status==="open"?"open":"exit at next open"}</td></tr>`).join("")}</tbody></table>`; }
+function sortedTable(box,rows,st,empty){ const draw=()=>{ box.innerHTML=rows.length?tradeTable(sortRows(rows,st.k,st.d),st):`<div class="empty">${empty}</div>`; bindSort(box,st,draw); }; draw(); }
+function inRange(d){ const f=PF.f; return (!f.from||d>=f.from)&&(!f.to||d<=f.to); }
+function logRows(){ const b=BT, f=PF.f; return b.rows.filter(r=>(f.side==="all"||r.side===f.side)&&(PF.mode==="both"||r.side===PF.mode)
+    &&(f.status==="all"||(f.status==="closed"?r.status==="closed":r.status!=="closed"))&&inRange(r.entry_date)
+    &&(!f.q||matchQ(f.q,r.ticker,(STOCKS&&STOCKS.map[r.ticker]||{}).name))); }
 function renderLog(){
-  const b=BT, f=PF.f; let rows=b.rows.filter(r=>(f.side==="all"||r.side===f.side)&&(PF.mode==="both"||r.side===PF.mode)
-    &&(f.status==="all"||(f.status==="closed"?r.status==="closed":r.status!=="closed"))&&(!f.q||matchQ(f.q,r.ticker,(STOCKS&&STOCKS.map[r.ticker]||{}).name)));
+  let rows=logRows(); const cl=rows.filter(r=>r.status==="closed"), w=cl.filter(r=>r.pnl>0), D=(BT.settings.dollars_per_trade||10000);
+  const tot=rows.reduce((a,r)=>a+(r.pnl||0)/100*D,0), avg=cl.length?cl.reduce((a,r)=>a+r.pnl,0)/cl.length:null;
+  $("#tsum").innerHTML=`<b>${rows.length.toLocaleString()}</b> trades entered ${PF.f.from?fd(PF.f.from):fd(BT.rows[0]?.entry_date)} → ${PF.f.to?fd(PF.f.to):fd(BT.data_end)}
+    (${rows.filter(r=>r.side==="long").length} long · ${rows.filter(r=>r.side==="short").length} short) · win rate <b>${cl.length?(w.length/cl.length*100).toFixed(1)+"%":"–"}</b>
+    · avg closed trade <b class="${cls(avg)}">${pct(avg)}</b> · total at $${num(D,0)}/trade <b class="${cls(tot)}">$${num(tot,0)}</b>`;
   rows=sortRows(rows,PF.sort.k,PF.sort.d); const per=50, pages=Math.max(1,Math.ceil(rows.length/per)); PF.page=Math.min(PF.page,pages-1);
   $("#tcount").textContent=`${rows.length.toLocaleString()} trades`;
-  $("#tlog").innerHTML=rows.length?tradeTable(rows.slice(PF.page*per,PF.page*per+per)):'<div class="empty">No trades match.</div>';
+  $("#tlog").innerHTML=rows.length?tradeTable(rows.slice(PF.page*per,PF.page*per+per),PF.sort):'<div class="empty">No trades match.</div>';
   $("#tpager").innerHTML=`<button ${PF.page?"":"disabled"} id="pp">‹ Prev</button> Page ${PF.page+1} of ${pages} <button ${PF.page<pages-1?"":"disabled"} id="pn">Next ›</button>`;
   $("#pp").onclick=()=>{PF.page--;renderLog();}; $("#pn").onclick=()=>{PF.page++;renderLog();};
-  document.querySelectorAll("#tlog [data-sk]").forEach(th=>th.onclick=()=>{const k=th.dataset.sk; PF.sort={k,d:PF.sort.k===k?-PF.sort.d:-1}; renderLog();});
+  bindSort($("#tlog"),PF.sort,renderLog);
 }
 function drawScatter(cv,rows){
   const d=window.devicePixelRatio||1, W=cv.clientWidth, H=cv.clientHeight; cv.width=W*d; cv.height=H*d; const g=cv.getContext("2d"); g.setTransform(d,0,0,d,0,0);
@@ -522,11 +550,11 @@ async function viewChart(ticker,focus){
       <form id="cf" class="row"><input id="cq" placeholder="Ticker or company" value="${esc(ticker)}" style="width:240px" autocomplete="off"><button class="pri">Go</button></form>
       <div class="seg" id="rng">${[["70 bars",70],["6M",126],["1Y",252],["2Y",504],["All",99999]].map(([l,v])=>`<button data-v="${v}" class="${CH.bars===v?"on":""}">${l}</button>`).join("")}</div>
       <button id="mbtn" title="Measure a move: click and drag on the chart (or hold Shift and drag anywhere). Esc clears it.">📏 Measure</button>
-      <div class="chips">${recent.slice(1,9).map(t=>`<span class="chip" data-tk="${esc(t)}">${esc(t)}</span>`).join("")}</div></div>
+      ${recent.length>1?`<span class="muted">Recent:</span><div class="chips">${recent.slice(1,9).map(t=>`<span class="chip" data-tk="${esc(t)}">${esc(t)}</span>`).join("")}<span class="chip" id="rclr" title="Clear recent tickers">✕</span></div>`:""}</div>
     <div class="card" style="padding:12px 14px"><div class="info" id="cinfo"></div></div>
     <div class="card" style="padding:8px"><div id="cv"></div>
-      <div class="note" style="padding:6px 8px 2px">Scroll = zoom · drag = move · drag or scroll on the price axis = zoom prices (any pane) · double-click = reset to 70 candles · 📏 or Shift+drag = measure.<br><span style="color:#26a69a">▲ BUY</span> / <span style="color:#ef5350">▼ SHORT</span> = strategy entry (next open after the EMA trend is set) ·
-      <span class="gold">EXIT</span> = position closed, with its result · <span style="color:#7fc4ff">small ▲ under a candle</span> = close above the previous 20-day high ·
+      <div class="note" style="padding:6px 8px 2px">Scroll = zoom · drag = move · drag or scroll on the price axis = zoom prices (any pane) · double-click = reset to 70 candles · 📏 Measure (or Shift): drag, or click the start and click again at the end · Esc clears.<br><span style="color:#26a69a">▲ BUY</span> / <span style="color:#ef5350">▼ SHORT</span> = strategy entry (next open after the EMA trend is set) ·
+      <span class="gold">EXIT</span> = position closed, with its result · <span style="color:#7fc4ff">small ▲ under a candle</span> = close above the previous 20-day high · <span style="color:#ff8a80">small ▼ above a candle</span> = close below the previous 20-day low ·
       green / red shading = EMA uptrend / downtrend (${EMA_TXT})</div></div>
     <div class="card"><h3>Backtest trades in ${esc(ticker)} <small>click a trade to jump to it on the chart</small></h3><div class="tbl-wrap" id="ctr"><div class="loading">…</div></div></div>`;
   attachAC($("#cq"),t=>{ location.hash="#chart/"+encodeURIComponent(t); });
@@ -548,7 +576,9 @@ async function viewChart(ticker,focus){
     for(const r of trades){ const ei=idx[r.entry_date], L=r.side==="long"; if(ei!=null) markers.push({i:ei,pos:L?"below":"above",dir:L?"up":"down",size:9,stroke:true,color:L?"#26a69a":"#ef5350",text:L?"BUY":"SHORT"});
       if(r.status==="closed"){ const xi=idx[r.exit_date]; if(xi!=null) markers.push({i:xi,pos:L?"above":"below",dir:L?"down":"up",size:9,stroke:true,color:"#f5c542",text:"EXIT "+pct(r.pnl,1)}); } } }catch(e){}
   for(let i=20;i<c.length;i++){ let hh=-Infinity; for(let k=i-20;k<i;k++) if(h[k]!=null&&h[k]>hh) hh=h[k];   // close above previous 20-day high
-    if(c[i]!=null&&c[i]>hh) markers.push({i,pos:"below",dir:"up",size:4.5,color:"#7fc4ff"}); }
+    if(c[i]!=null&&c[i]>hh) markers.push({i,pos:"below",dir:"up",size:4.5,color:"#7fc4ff"});
+    let ll=Infinity; for(let k=i-20;k<i;k++) if(l[k]!=null&&l[k]<ll) ll=l[k];                          // close below previous 20-day low
+    if(c[i]!=null&&c[i]<ll) markers.push({i,pos:"above",dir:"down",size:4.5,color:"#ff8a80"}); }
   if(CH.chart) CH.chart.destroy();
   CH.chart=new RChart($("#cv"),{dates,height:Math.max(580,Math.min(880,window.innerHeight-220)),initial:70,
     onMeasureEnd:()=>$("#mbtn").classList.remove("pri"),panes:[
@@ -561,8 +591,9 @@ async function viewChart(ticker,focus){
     {w:1,title:"DMI 14",fmt:x=>x.toFixed(1),refs:[{v:20,color:"#3a4654"}],series:[
       {type:"line",name:"+DI",v:dm.plus,color:"#26a69a"},{type:"line",name:"−DI",v:dm.minus,color:"#ef5350"},{type:"line",name:"ADX",v:dm.adx,color:"#f5c542",width:1.8}]}]});
   if(CH.bars!==70) CH.chart.setBars(CH.bars);
+  $("#rclr")&&($("#rclr").onclick=e=>{ e.stopPropagation(); try{localStorage.setItem("mr_recent",JSON.stringify([ticker]));}catch(_){ } viewChart(ticker); });
   $("#mbtn").onclick=()=>{ const on=!CH.chart.measureMode; CH.chart.setMeasure(on); $("#mbtn").classList.toggle("pri",on); };
-  $("#ctr").innerHTML=trades.length?tradeTable(sortRows(trades,"entry_date",-1),false):'<div class="empty">The strategy has not traded this ticker in the backtest period.</div>';
+  sortedTable($("#ctr"),trades,CH.ts ||= {k:"entry_date",d:-1},"The strategy has not traded this ticker in the backtest period.");
   if(focus){ const tr=trades.find(r=>r.signal===focus); const si=idx[focus]??idx[tr?.entry_date];
     if(si!=null){ const ex=tr?(tr.status==="closed"?idx[tr.exit_date]:dates.length-1):si+1; CH.chart.highlight(si,ex??si+1);
       CH.chart.centerOn(si,Math.max(70,((ex??si)-si)*1.6+20)); }
@@ -610,12 +641,12 @@ async function viewWatchlist(){
 const SC={tab:"breakouts",sort:null,dir:-1,q:"",data:null};
 async function viewScanner(){
   const m=$("#main"); const dates=await J("data/dates.json"); if(!SC.data) SC.data=await J("data/latest.json"); const d=SC.data;
-  const TABS=[["breakouts","Trend + Breakout"],["rs_days","Up while SPY down"],["rs_leaders","RS Leaders"],["trend","EMA Trend"]];
+  const TABS=[["breakouts","Trend + Breakout"],["breakdowns","Downtrend + Breakdown"],["rs_days","Up while SPY down"],["rs_leaders","RS Leaders"],["trend","EMA Trend"]];
   const b=d.benchmark, br=d.breadth;
   m.innerHTML=`<div class="row" style="margin-bottom:12px;justify-content:space-between">
      <div class="row"><h2>Scanner</h2><select id="sdate">${dates.map(x=>`<option value="${x}" ${x===d.date?"selected":""}>${fd(x)}</option>`).join("")}</select></div>
      <div class="row muted">${b.ticker} <b style="color:var(--text)">${b.close}</b> <span class="${cls(b.chg)}">${pct(b.chg)}</span> · ${d.universe_size} scanned · ${br.pct_in_trend}% in EMA trend · ${br.pct_above_ema200}% above 200 EMA · ${br.new_trend_today} new today</div></div>
-   <div class="tabs">${TABS.map(([k,l])=>`<button data-t="${k}" class="${SC.tab===k?"on":""}">${l}<span class="n">${d[k].length}</span></button>`).join("")}</div>
+   <div class="tabs">${TABS.map(([k,l])=>`<button data-t="${k}" class="${SC.tab===k?"on":""}">${l}<span class="n">${(d[k]||[]).length}</span></button>`).join("")}</div>
    <div class="row" style="margin-bottom:10px"><input id="sq" placeholder="Search ticker or name" value="${esc(SC.q)}" style="width:220px"><span class="note"><span class="gold">★</span> = RS line at 50-day high · click a ticker for its chart · “+ Watch” adds it to your watchlist</span></div>
    <div class="card" style="padding:4px 8px"><div class="tbl-wrap" id="stbl"></div></div>`;
   $("#sdate").onchange=async e=>{SC.data=await J(`data/scans/${e.target.value}.json`); viewScanner();};
@@ -624,13 +655,13 @@ async function viewScanner(){
 }
 function drawScan(){
   const d=SC.data; if(SC.tab==="rs_days"&&d.benchmark.chg>=0){ $("#stbl").innerHTML=`<div class="empty">${d.benchmark.ticker} was not down on ${fd(d.date)}.</div>`; return; }
-  const q=SC.q.toUpperCase(); let rows=d[SC.tab].filter(r=>!q||r.ticker.includes(q)||(r.name||"").toUpperCase().includes(q)); if(SC.sort) rows=sortRows(rows,SC.sort,SC.dir);
+  const q=SC.q.toUpperCase(); let rows=(d[SC.tab]||[]).filter(r=>!q||r.ticker.includes(q)||(r.name||"").toUpperCase().includes(q)); if(SC.sort) rows=sortRows(rows,SC.sort,SC.dir);
   const cols=[["ticker","Ticker"],["name","Name"],["close","Close"],["chg","Chg %"],["rs","RS"],["vol_ratio","Vol ×"],["days_trend","Days in trend"],["ext_ema20","% from EMA20"],["perf_1m","1M %"]];
   $("#stbl").innerHTML=rows.length?`<table><thead><tr>${cols.map(([k,l])=>`<th data-k="${k}">${l}${SC.sort===k?(SC.dir>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>
     <td><span class="tk" data-tk="${esc(r.ticker)}">${esc(r.ticker)}</span>${r.rs_high?' <span class="gold" title="RS line at 50-day high">★</span>':""} ${starHTML(r.ticker)}</td>
     <td class="nm">${esc(r.name)}</td><td>${r.close}</td><td class="${cls(r.chg)}">${pct(r.chg)}</td><td>${r.rs??"–"}</td><td>${r.vol_ratio??"–"}</td>
     <td>${r.days_trend}</td><td>${r.ext_ema20==null?"–":r.ext_ema20+"%"}</td><td class="${cls(r.perf_1m)}">${pct(r.perf_1m,1)}</td></tr>`).join("")}</tbody></table>`:'<div class="empty">No stocks match.</div>';
-  document.querySelectorAll("#stbl th").forEach(th=>th.onclick=()=>{const k=th.dataset.k; SC.dir=SC.sort===k?-SC.dir:-1; SC.sort=k; drawScan();});
+  document.querySelectorAll("#stbl th").forEach(th=>th.onclick=()=>{const k=th.dataset.k; SC.dir=SC.sort===k?-SC.dir:1; SC.sort=k; drawScan();});
 }
 
 /* ------------------------------------------------------------------ ROTATION */
@@ -709,7 +740,7 @@ async function viewDownload(){
     for(const r of b.rows) out.push([r.ticker,(st.map[r.ticker]||{}).name||"",r.side,fd(r.signal),fd(r.entry_date),r.entry,r.status==="closed"?fd(r.exit_date):"",r.status==="closed"?r.exit:"",r.bars,r.pnl,r.mfe,r.mae,r.status,r.score]);
     saveCSV(`strategy-trades_${fd(b.data_end)}.csv`,out); busy("#dbts",`${(out.length-1).toLocaleString()} trades saved`); };
   $("#dscb").onclick=async()=>{ const d=$("#dsc").value; const x=await J(`data/scans/${d}.json`); const out=[["date","list","ticker","name","close","chg_pct","rs_rating","rs_line_50d_high","vol_ratio","days_in_trend","pct_from_ema20","perf_1m_pct"]];
-    for(const [k,l] of [["breakouts","Trend + breakout"],["rs_days","Up while SPY down"],["rs_leaders","RS leaders"],["trend","EMA trend"]]) for(const r of x[k]) out.push([fd(d),l,r.ticker,r.name,r.close,r.chg,r.rs,r.rs_high?"yes":"",r.vol_ratio,r.days_trend,r.ext_ema20,r.perf_1m]);
+    for(const [k,l] of [["breakouts","Trend + breakout"],["breakdowns","Downtrend + breakdown"],["rs_days","Up while SPY down"],["rs_leaders","RS leaders"],["trend","EMA trend"]]) for(const r of (x[k]||[])) out.push([fd(d),l,r.ticker,r.name,r.close,r.chg,r.rs,r.rs_high?"yes":"",r.vol_ratio,r.days_trend,r.ext_ema20,r.perf_1m]);
     saveCSV(`scanner_${fd(d)}.csv`,out); };
 }
 

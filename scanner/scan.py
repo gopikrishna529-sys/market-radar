@@ -51,6 +51,8 @@ def run_scan(w, ind):
     N = cfg["breakout"]["lookback_days"]
     prior_high = h.shift(1).rolling(N, min_periods=N).max()
     breakout = trend & (c > prior_high)
+    prior_low = w["low"].shift(1).rolling(N, min_periods=N).min()
+    breakdown = ind["short_trend"] & (c < prior_low)
     avg_vol, chg = ind["avg_vol"], ind["chg"]
     last = c.iloc[-1]
 
@@ -63,9 +65,10 @@ def run_scan(w, ind):
 
     spy_chg = float(chg[bench].iloc[-1])
     days_trend = streak(trend[uni])
+    days_down = streak(ind["short_trend"][uni])
     t_last, b_last = trend[uni].iloc[-1], breakout[uni].iloc[-1]
 
-    def row(t):
+    def row(t, short=False):
         r = rating.get(t)
         return {
             "ticker": t,
@@ -75,7 +78,7 @@ def run_scan(w, ind):
             "vol_ratio": _rnd(v[t].iloc[-1] / avg_vol[t].iloc[-1]),
             "rs": int(r) if pd.notna(r) else None,
             "rs_high": bool(rs_new_high.get(t, False)),
-            "days_trend": int(days_trend.get(t, 0)),
+            "days_trend": int((days_down if short else days_trend).get(t, 0)),
             "ext_ema20": _rnd(_pct(last[t], ef[t].iloc[-1]), 1),
             "perf_1m": _rnd(_pct(last[t], c[t].iloc[-22]), 1) if len(c) > 22 else None,
         }
@@ -83,6 +86,8 @@ def run_scan(w, ind):
     by_rs = lambda r: -(r["rs"] or 0)
     trend_list = sorted((row(t) for t in uni[t_last.fillna(False).values]), key=by_rs)
     breakout_list = sorted((row(t) for t in uni[b_last.fillna(False).values]), key=by_rs)
+    d_last = breakdown[uni].iloc[-1]
+    breakdown_list = sorted((row(t, True) for t in uni[d_last.fillna(False).values]), key=lambda r: (r["rs"] or 0))
     rs_days = []
     if spy_chg < 0:
         up = chg[uni].iloc[-1] > cfg["relative_strength"]["rs_day_min_gain_pct"]
@@ -97,6 +102,7 @@ def run_scan(w, ind):
         "universe_size": int(len(uni)),
         "trend": trend_list,
         "breakouts": breakout_list,
+        "breakdowns": breakdown_list,
         "rs_days": rs_days,
         "rs_leaders": leaders,
         "sectors": sector_rotation(c, spy, cfg["sectors"], "Sector"),
