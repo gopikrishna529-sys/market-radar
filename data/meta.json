@@ -1,5 +1,11 @@
 {
   "tickers_updated": "2026-11-26",
   "splits_updated": "2026-11-26",
-  "splits_from": "2024-11-01"
+  "splits_from": "2024-11-01",
+  "ticker_types": [
+    "CS",
+    "ADRC",
+    "ETF",
+    "ETV"
+  ]
 }
