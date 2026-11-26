@@ -1,5 +1,6 @@
 """Writes the static website: app page + JSON data files it reads."""
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -97,6 +98,7 @@ def build_site(w, ind):
 
     html = TEMPLATE.read_text().replace("__TITLE__", CONFIG["report"]["site_title"])
     html = html.replace("__EMA__", json.dumps(CONFIG["ema"]))
+    html = html.replace("__REPO__", os.environ.get("GITHUB_REPOSITORY", ""))
     (SITE / "index.html").write_text(html)
     (SITE / ".nojekyll").write_text("")
     print(f"website built: {len(chart_set)} charts, {len(dates)} days of scans")
