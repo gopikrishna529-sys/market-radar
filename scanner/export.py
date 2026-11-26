@@ -83,6 +83,14 @@ def build_site(w, ind):
     names.update({**CONFIG["sectors"], **(CONFIG.get("industries") or {}),
                   "SPY": "S&P 500 ETF", "QQQ": "Nasdaq-100 ETF", "IWM": "Russell 2000 ETF", "DIA": "Dow Jones ETF",
                   "TLT": "20+ Year Treasury ETF", "GLD": "Gold ETF"})
+    from .profiles import EXCHANGES, load_profiles
+    prof = load_profiles().drop_duplicates("ticker").set_index("ticker")
+    ptype = tick["type"].to_dict() if "type" in tick else {}
+    pexch = tick["exchange"].to_dict() if "exchange" in tick else {}
+    adv = ind["avg_dollar_vol"].iloc[-1]
+    def perf(t, n):
+        s_ = c[t].dropna()
+        return _num((s_.iloc[-1] / s_.iloc[-1 - n] - 1) * 100, 1) if len(s_) > n else None
     rows = []
     for t in chart_set:
         state = "L" if lt[t].iloc[-1] else "S" if st[t].iloc[-1] else ""
@@ -90,10 +98,15 @@ def build_site(w, ind):
         rows.append([t, names.get(t, "") or "", _num(last[t], 2), _num(ind["chg"][t].iloc[-1], 2),
                      None if pd.isna(rating.get(t)) else int(rating[t]), state, days,
                      _num((last[t] / em[t] - 1) * 100, 1) if np.isfinite(em.get(t, np.nan)) else None,
-                     _num(avgv.get(t, np.nan) / 1000, 0), t in uni_set])
+                     _num(avgv.get(t, np.nan) / 1000, 0), t in uni_set,
+                     *_profile(t, prof, ptype, pexch, last, EXCHANGES),
+                     perf(t, 21), perf(t, 63), _num(adv.get(t, np.nan) / 1e6, 1)])
     (data / "stocks.json").write_text(json.dumps({
         "date": cal[-1],
-        "fields": ["ticker", "name", "close", "chg", "rs", "state", "days", "vs_ema50", "avg_vol_k", "in_scan"],
+        "fields": ["ticker", "name", "close", "chg", "rs", "state", "days", "vs_ema50", "avg_vol_k", "in_scan",
+                   "type", "exchange", "sector", "industry", "mcap_m", "shares_m", "country",
+                   "perf_1m", "perf_3m", "adv_m"],
+        "groups": CONFIG.get("groups", {}),
         "rows": rows}, separators=(",", ":")))
 
     html = TEMPLATE.read_text().replace("__TITLE__", CONFIG["report"]["site_title"])
@@ -102,3 +115,24 @@ def build_site(w, ind):
     (SITE / "index.html").write_text(html)
     (SITE / ".nojekyll").write_text("")
     print(f"website built: {len(chart_set)} charts, {len(dates)} days of scans")
+
+
+def _profile(t, prof, ptype, pexch, last, EXCHANGES):
+    """type, exchange, sector, industry, market cap ($M), shares outstanding (M), country."""
+    ty = {"CS": "Stock", "ADRC": "ADR", "ETF": "ETF", "ETV": "ETF", "ETN": "ETN"}.get(ptype.get(t), "ETF" if t in
+         (list(CONFIG["sectors"]) + list(CONFIG.get("industries") or {}) + ["SPY", "QQQ", "IWM", "DIA", "TLT", "GLD"]) else "Stock")
+    ex = EXCHANGES.get(pexch.get(t), pexch.get(t) or "")
+    if t in prof.index:
+        p = prof.loc[t]
+        mc = p.get("market_cap")
+        mcap = _num(mc / 1e6, 0) if mc == mc and mc else None
+        shares = _num(mc / last[t] / 1e6, 1) if mcap and last.get(t) else None
+        sector = p.get("sector") if isinstance(p.get("sector"), str) else "Other"
+        industry = p.get("industry") if isinstance(p.get("industry"), str) else "Other"
+        country = p.get("country") if isinstance(p.get("country"), str) else ""
+    else:
+        mcap = shares = None
+        sector, industry, country = ("ETF", "ETF", "") if ty in ("ETF", "ETN") else ("Other", "Other", "")
+    if ty in ("ETF", "ETN"):
+        sector, industry = "ETF", "ETF"
+    return [ty, ex, sector, industry, mcap, shares, country]

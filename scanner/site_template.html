@@ -96,6 +96,7 @@ table.trades tbody tr{cursor:pointer} tr.sel td{background:#1d2a3a!important}
     <a href="#scanner" data-r="scanner">Scanner</a>
     <a href="#chart" data-r="chart">Chart</a>
     <a href="#watchlist" data-r="watchlist">Watchlist</a>
+    <a href="#sectors" data-r="sectors">Sectors</a>
     <a href="#rotation" data-r="rotation">Sector Rotation</a>
     <a href="#download" data-r="download">Download</a>
   </nav>
@@ -130,7 +131,8 @@ const WL = {
 function starHTML(t){ const on=WL.has(t); return `<span class="wl ${on?"on":""}" data-star="${esc(t)}" title="Add to / remove from watchlist">${on?"✓ Watching":"+ Watch"}</span>`; }
 document.addEventListener("click", e => {
   const s = e.target.closest("[data-star]"); if(s){ e.stopPropagation(); const on = WL.toggle(s.dataset.star); document.querySelectorAll(`[data-star="${CSS.escape(s.dataset.star)}"]`).forEach(x=>{x.classList.toggle("on",on);x.textContent=on?"✓ Watching":"+ Watch";}); return; }
-  const tr = e.target.closest("[data-trade]"); if(tr){ const [tk,d]=tr.dataset.trade.split("|"); location.hash=`#chart/${encodeURIComponent(tk)}/${d}`; return; }
+  if(e.target.closest("a")) return;
+  const tr = e.target.closest("[data-trade]"); if(tr){ const [tk,d]=tr.dataset.trade.split("|"); location.hash=`#chart/${encodeURIComponent(tk)}`+(d?`/${d}`:""); return; }
   const t = e.target.closest("[data-tk]"); if(t){ location.hash = "#chart/" + encodeURIComponent(t.dataset.tk) + (t.dataset.d?"/"+t.dataset.d:""); }
 });
 
@@ -358,9 +360,9 @@ function drawMini(cv,b,cal){ const d=window.devicePixelRatio||1, W=336, H=170; c
     for(let i=s0;i<n;i++){ const v=e[i]; if(v==null||v<mn||v>mx){pen=false;continue;} pen?g.lineTo(X(i),Y(v)):g.moveTo(X(i),Y(v)); pen=true; } g.stroke(); }
   g.lineWidth=1; g.fillStyle="#7d8a99"; g.textAlign="left"; g.fillText(fd(cal[b.i0+s0]),2,H-3); g.textAlign="right"; g.fillText(fd(cal[b.i0+n-1]),W-46,H-3); }
 if(!matchMedia("(hover: none)").matches){
-  document.addEventListener("mouseover",e=>{ const el=e.target.closest(".tk,.chip"); if(!el){ return; } const tk=(el.dataset.tk||el.textContent).trim(); if(!tk||tk===PV.t) return;
+  document.addEventListener("mouseover",e=>{ const el=e.target.closest(".tk,.chip[data-tk]"); if(!el){ return; } const tk=(el.dataset.tk||el.textContent).trim(); if(!tk||tk===PV.t) return;
     clearTimeout(PV.timer); PV.timer=setTimeout(()=>pvShow(tk,e.clientX,e.clientY),280); });
-  document.addEventListener("mouseout",e=>{ const el=e.target.closest(".tk,.chip"); if(el&&!el.contains(e.relatedTarget)) pvHide(); });
+  document.addEventListener("mouseout",e=>{ const el=e.target.closest(".tk,.chip[data-tk]"); if(el&&!el.contains(e.relatedTarget)) pvHide(); });
   window.addEventListener("scroll",pvHide,{passive:true}); window.addEventListener("hashchange",pvHide);
 }
 
@@ -488,11 +490,14 @@ async function viewPortfolio(){
   sortedTable($("#openpos"),op,PF.ops ||= {k:"pnl",d:-1},"No open positions.");
   { const D=b.settings.dollars_per_trade||10000, L=op.filter(r=>r.side==="long"), S=op.filter(r=>r.side==="short"), win=op.filter(r=>r.pnl>0);
     const sum=a=>a.reduce((x,r)=>x+(r.pnl||0),0), avg=(a,k)=>a.length?a.reduce((x,r)=>x+(r[k]||0),0)/a.length:null, usd=a=>sum(a)/100*D;
+    const one=a=>{ const cost=a.reduce((x,r)=>x+(r.entry||0),0), pnl=a.reduce((x,r)=>x+(r.pnl||0)/100*(r.entry||0),0); return {cost,pnl,pct:cost?pnl/cost*100:null}; };
     const best=op.reduce((m,r)=>!m||r.pnl>m.pnl?r:m,null), worst=op.reduce((m,r)=>!m||r.pnl<m.pnl?r:m,null), exitN=op.filter(r=>r.status!=="open").length;
     const k2=(l,v,sub,c="")=>`<div class="kpi"><div class="l">${l}</div><div class="v ${c}">${v}</div>${sub?`<div class="s">${sub}</div>`:""}</div>`;
     $("#opstats").innerHTML=op.length?[
       k2("Open positions",op.length,`${L.length} long · ${S.length} short`),
-      k2("Unrealised P&L",`$${num(usd(op),0)}`,`at $${num(D,0)} per trade · ${num(op.length*D,0)} invested`,cls(usd(op))),
+      k2("Unrealised P&L",`$${num(usd(op),0)}`,`at $${num(D,0)} per trade · $${num(op.length*D,0)} invested`,cls(usd(op))),
+      k2("Total P&L %",pct(usd(op)/(op.length*D)*100),`long ${pct(L.length?usd(L)/(L.length*D)*100:null)} · short ${pct(S.length?usd(S)/(S.length*D)*100:null)}`,cls(usd(op))),
+      k2("1 share of every trade",`$${num(one(op).pnl,0)}`,`cost $${num(one(op).cost,0)} → <b class="${cls(one(op).pnl)}">${pct(one(op).pct)}</b><br>long $${num(one(L).pnl,0)} (${pct(one(L).pct,1)}) · short $${num(one(S).pnl,0)} (${pct(one(S).pct,1)})`,cls(one(op).pnl)),
       k2("Long P&L",`$${num(usd(L),0)}`,`avg ${pct(avg(L,"pnl"))}`,cls(usd(L))),
       k2("Short P&L",`$${num(usd(S),0)}`,`avg ${pct(avg(S,"pnl"))}`,cls(usd(S))),
       k2("Avg open trade",pct(avg(op,"pnl")),`${(win.length/op.length*100).toFixed(1)}% in profit`,cls(avg(op,"pnl"))),
@@ -504,8 +509,8 @@ async function viewPortfolio(){
     $("#opn").textContent=op.length.toLocaleString()+" open";
     $("#opnote").textContent=op.length?`P&L marked at the ${fd(b.data_end)} close.`:"";
     $("#opexp").onclick=()=>{ const st2=STOCKS||{map:{}}, rows=sortRows(op,PF.ops.k,PF.ops.d);
-      const out=[["ticker","name","side","signal_date","entry_date","entry_price","last_price","days_held","pnl_pct","pnl_usd","max_runup_pct","max_drawdown_pct","status","rs_score"]];
-      for(const r of rows) out.push([r.ticker,(st2.map[r.ticker]||{}).name||"",r.side,fd(r.signal),fd(r.entry_date),r.entry,r.exit,r.bars,r.pnl,Math.round((r.pnl||0)/100*D),r.mfe,r.mae,r.status==="open"?"open":"exit at next open",r.score]);
+      const out=[["ticker","name","side","signal_date","entry_date","entry_price","last_price","days_held","pnl_pct","pnl_usd_at_"+D,"pnl_usd_1_share","max_runup_pct","max_drawdown_pct","status","rs_score"]];
+      for(const r of rows) out.push([r.ticker,(st2.map[r.ticker]||{}).name||"",r.side,fd(r.signal),fd(r.entry_date),r.entry,r.exit,r.bars,r.pnl,Math.round((r.pnl||0)/100*D),Math.round((r.pnl||0)*(r.entry||0))/100,r.mfe,r.mae,r.status==="open"?"open":"exit at next open",r.score]);
       saveCSV(`open-positions_${fd(b.data_end)}.csv`,out); }; }
   // signals by date
   const pend=((b.next_open||{}).enter||[]).filter(inMode).map(x=>({ticker:x.ticker,side:x.side,signal:b.data_end,entry_date:null,entry:null,exit_date:null,exit:null,bars:null,pnl:null,mfe:null,mae:null,status:"pending",in_pf:"",score:x.score}));
@@ -723,7 +728,7 @@ function drawScan(){
 async function viewRotation(){
   const d=await J("data/latest.json"); const all=[...d.sectors,...d.industries]; const inn=all.filter(r=>r.quadrant==="Improving");
   const tbl=(rows,title)=>`<div class="card"><h3>${title}</h3><div class="tbl-wrap"><table><thead><tr><th>#</th><th>ETF</th><th>Name</th><th class="r">vs SPY 1W</th><th class="r">1M</th><th class="r">3M</th><th>Quadrant</th><th>Rank move</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.rank}</td>
-     <td><span class="tk" data-tk="${r.ticker}">${r.ticker}</span></td><td class="nm">${esc(r.name)}</td>
+     <td><span class="tk" data-tk="${r.ticker}">${r.ticker}</span> <a class="chip" href="#sectors/group/${r.ticker}" title="All stocks in this group">stocks →</a></td><td class="nm">${esc(r.name)}</td>
      <td class="r ${cls(r.rel_1w)}">${pct(r.rel_1w,1)}</td><td class="r ${cls(r.rel_1m)}">${pct(r.rel_1m,1)}</td><td class="r ${cls(r.rel_3m)}">${pct(r.rel_3m,1)}</td>
      <td class="${r.quadrant}"><b>${r.quadrant}</b></td><td class="${cls(r.rank_change)}">${r.rank_change>0?"▲"+r.rank_change:r.rank_change<0?"▼"+(-r.rank_change):"–"}</td></tr>`).join("")}</tbody></table></div></div>`;
   $("#main").innerHTML=`<div class="row" style="margin-bottom:12px"><h2>Sector Rotation</h2><span class="muted">as of ${fd(d.date)}</span></div>
@@ -744,6 +749,81 @@ function rrg(rows){
     s+=`<polyline fill="none" stroke="${c}" stroke-opacity=".45" stroke-width="1.5" points="${t.map(p=>X(p.x)+","+Y(p.y)).join(" ")}"/>`;
     s+=`<circle cx="${X(r.rs_ratio)}" cy="${Y(r.rs_mom)}" r="5" fill="${c}"><title>${r.ticker} ${esc(r.name)}: ${r.quadrant}</title></circle><text x="${X(r.rs_ratio)+7}" y="${Y(r.rs_mom)+4}" font-size="11" fill="#e7ebf0">${r.ticker}</text>`; }
   return s+"</svg>";
+}
+
+/* ------------------------------------------------------------------ SECTORS */
+const SE={group:"",sector:"",industry:"",exchange:"",type:"",cap:"",liquid:false,q:"",sort:{k:"mcap_m",d:-1},isort:{k:"n",d:-1}};
+const CAPS=[["","Any size"],["mega","Mega ≥ $200B"],["large","Large $10–200B"],["mid","Mid $2–10B"],["small","Small $300M–2B"],["micro","Micro < $300M"]];
+const capOk=(m,c)=>!c||(m!=null&&(c==="mega"?m>=2e5:c==="large"?m>=1e4&&m<2e5:c==="mid"?m>=2e3&&m<1e4:c==="small"?m>=300&&m<2e3:m<300));
+const fmtCap=m=>m==null?"–":m>=1e6?"$"+(m/1e6).toFixed(2)+"T":m>=1e3?"$"+(m/1e3).toFixed(1)+"B":"$"+m.toFixed(0)+"M";
+function inGroup(x,g,G){ const d=G[g]; if(!d||x.type==="ETF"||x.type==="ETN") return false;
+  if(d.sector) return x.sector===d.sector; const ind=(x.industry||"").toLowerCase(); return (d.industry||[]).some(k=>ind.includes(k.toLowerCase())); }
+async function viewSectors(group){
+  const st=await stocks(); const raw=await J("data/stocks.json"); const G=raw.groups||{}; if(group){ Object.assign(SE,{group,sector:"",industry:""}); }
+  const all=st.list, uniq=k=>[...new Set(all.map(x=>x[k]).filter(Boolean))].sort();
+  const etfName=t=>(st.map[t]||{}).name||t;
+  $("#main").innerHTML=`<div class="row" style="margin-bottom:12px;justify-content:space-between"><div class="row"><h2>Sectors & industries</h2>
+      <span class="muted">${all.length.toLocaleString()} charted tickers · sector, industry and market cap from the Nasdaq screener, exchange from Massive</span></div>
+      <button id="seexp">⬇ Export this list (CSV)</button></div>
+    <div class="card"><div class="row" style="gap:10px">
+      <select id="seg"><option value="">Rotation group: any</option>${Object.keys(G).map(t=>`<option value="${t}">${t} — ${esc(etfName(t))}</option>`).join("")}</select>
+      <select id="sesec"><option value="">All sectors</option>${uniq("sector").map(x=>`<option>${esc(x)}</option>`).join("")}</select>
+      <select id="seind"></select>
+      <select id="seex"><option value="">All exchanges</option>${uniq("exchange").map(x=>`<option>${esc(x)}</option>`).join("")}</select>
+      <select id="setype"><option value="">Stocks, ADRs & ETFs</option>${uniq("type").map(x=>`<option>${esc(x)}</option>`).join("")}</select>
+      <select id="secap">${CAPS.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select>
+      <label class="muted"><input type="checkbox" id="seliq"> liquid only (scanner filter)</label>
+      <input id="seq" placeholder="Filter ticker or company" style="width:190px"><button id="seclr">Clear</button></div>
+      <div class="note" id="segnote" style="margin-top:8px"></div></div>
+    <div class="kpis" id="sekpi"></div>
+    <div class="card"><h3>Industries in this selection <small>breadth: how many are in the EMA uptrend / downtrend · click an industry to open it</small></h3><div class="tbl-wrap scroll" id="seinds" style="max-height:330px"></div></div>
+    <div class="card"><h3>Companies <span class="n" id="secount"></span> <small>click a column to sort · click a row for its chart · hover a ticker for a preview</small></h3><div class="tbl-wrap scroll" id="setbl"></div></div>`;
+  const set=(id,v)=>{ $(id).value=v; };
+  const fillInd=()=>{ const sec=SE.sector; const inds=[...new Set(all.filter(x=>!sec||x.sector===sec).map(x=>x.industry).filter(Boolean))].sort();
+    $("#seind").innerHTML=`<option value="">All industries${sec?" in "+esc(sec):""}</option>`+inds.map(x=>`<option>${esc(x)}</option>`).join(""); if(!inds.includes(SE.industry)) SE.industry=""; set("#seind",SE.industry); };
+  const filt=()=>all.filter(x=>(!SE.group||inGroup(x,SE.group,G))&&(!SE.sector||x.sector===SE.sector)&&(!SE.industry||x.industry===SE.industry)
+    &&(!SE.exchange||x.exchange===SE.exchange)&&(!SE.type||x.type===SE.type)&&capOk(x.mcap_m,SE.cap)&&(!SE.liquid||x.in_scan)&&matchQ(SE.q,x.ticker,x.name));
+  const med=a=>{ const v=a.filter(x=>x!=null).sort((p,q)=>p-q); return v.length?v[Math.floor(v.length/2)]:null; }, mean=a=>{ const v=a.filter(x=>x!=null); return v.length?v.reduce((p,q)=>p+q,0)/v.length:null; };
+  const draw=()=>{ const rows=filt(); $("#secount").textContent=rows.length.toLocaleString();
+    const up=rows.filter(x=>x.state==="L").length, dn=rows.filter(x=>x.state==="S").length, n=rows.length||1;
+    const g=SE.group&&G[SE.group]; $("#segnote").innerHTML=g?`<b>${SE.group}</b> group = ${g.sector?`every stock in the <b>${esc(g.sector)}</b> sector`:`every stock whose industry contains: <b>${g.industry.map(esc).join(", ")}</b>`}. This is the group the ETF tracks, not its exact holdings. <span class="tk" data-tk="${SE.group}">Open ${SE.group} chart</span>`:"Pick a rotation group (e.g. SMH = semiconductors), a sector, an industry, an exchange or a size.";
+    const k=(l,v,sub,c="")=>`<div class="kpi"><div class="l">${l}</div><div class="v ${c}">${v}</div>${sub?`<div class="s">${sub}</div>`:""}</div>`;
+    $("#sekpi").innerHTML=[k("Companies",rows.length.toLocaleString(),`${rows.filter(x=>x.in_scan).length} pass the liquidity filter`),
+      k("In EMA uptrend",(up/n*100).toFixed(1)+"%",`${up} stocks`,"up"),k("In EMA downtrend",(dn/n*100).toFixed(1)+"%",`${dn} stocks`,"down"),
+      k("Median RS rating",med(rows.map(x=>x.rs))??"–",""),k("Avg 1-month",pct(mean(rows.map(x=>x.perf_1m)),1),"",cls(mean(rows.map(x=>x.perf_1m)))),
+      k("Avg 3-month",pct(mean(rows.map(x=>x.perf_3m)),1),"",cls(mean(rows.map(x=>x.perf_3m)))),k("Total market cap",fmtCap(rows.reduce((a,x)=>a+(x.mcap_m||0),0)),"")].join("");
+    // industry breadth
+    const by={}; for(const x of rows) (by[x.industry||"Other"] ||= []).push(x);
+    let ir=Object.entries(by).map(([name,a])=>({name,n:a.length,up:a.filter(x=>x.state==="L").length/a.length*100,dn:a.filter(x=>x.state==="S").length/a.length*100,
+      p1:mean(a.map(x=>x.perf_1m)),p3:mean(a.map(x=>x.perf_3m)),rs:med(a.map(x=>x.rs)),cap:a.reduce((s2,x)=>s2+(x.mcap_m||0),0)}));
+    ir=sortRows(ir,SE.isort.k,SE.isort.d);
+    $("#seinds").innerHTML=`<table class="trades"><thead><tr>${sortHead([["name","Industry"],["n","Companies"],["up","% uptrend"],["dn","% downtrend"],["rs","Median RS"],["p1","Avg 1M"],["p3","Avg 3M"],["cap","Market cap"]],SE.isort,["n","up","dn","rs","p1","p3","cap"])}</tr></thead><tbody>${ir.map(r=>`<tr data-ind="${esc(r.name)}">
+      <td>${esc(r.name)}</td><td class="r">${r.n}</td><td class="r up">${r.up.toFixed(0)}%</td><td class="r down">${r.dn.toFixed(0)}%</td><td class="r">${r.rs??"–"}</td>
+      <td class="r ${cls(r.p1)}">${pct(r.p1,1)}</td><td class="r ${cls(r.p3)}">${pct(r.p3,1)}</td><td class="r">${fmtCap(r.cap||null)}</td></tr>`).join("")}</tbody></table>`;
+    bindSort($("#seinds"),SE.isort,draw);
+    $("#seinds").querySelectorAll("tr[data-ind]").forEach(tr=>tr.onclick=()=>{ SE.industry=tr.dataset.ind; const x=all.find(y=>y.industry===SE.industry); if(x&&!SE.group) SE.sector=x.sector; set("#sesec",SE.sector); fillInd(); draw(); });
+    // companies
+    const cols=[["ticker","Ticker"],["name","Name"],["type","Type"],["exchange","Exchange"],["sector","Sector"],["industry","Industry"],["mcap_m","Market cap"],["shares_m","Shares (M)"],["close","Price"],["chg","Chg %"],["perf_1m","1M %"],["perf_3m","3M %"],["rs","RS"],["state","EMA trend"],["vs_ema50","vs EMA"+EMA.exit],["adv_m","$ vol/day (M)"]];
+    const srt=sortRows(rows,SE.sort.k,SE.sort.d).slice(0,3000);
+    $("#setbl").innerHTML=rows.length?`<table class="trades"><thead><tr>${sortHead(cols,SE.sort,["mcap_m","shares_m","close","chg","perf_1m","perf_3m","rs","vs_ema50","adv_m"])}</tr></thead><tbody>${srt.map(x=>`<tr data-trade="${esc(x.ticker)}|">
+      <td><span class="tk" data-tk="${esc(x.ticker)}">${esc(x.ticker)}</span> ${starHTML(x.ticker)}</td><td class="nm">${esc(x.name)}</td><td class="muted">${esc(x.type||"")}</td><td class="muted">${esc(x.exchange||"")}</td>
+      <td class="nm">${esc(x.sector||"")}</td><td class="nm">${esc(x.industry||"")}</td><td class="r">${fmtCap(x.mcap_m)}</td><td class="r">${x.shares_m??"–"}</td>
+      <td class="r">${fmtPx(x.close)}</td><td class="r ${cls(x.chg)}">${pct(x.chg)}</td><td class="r ${cls(x.perf_1m)}">${pct(x.perf_1m,1)}</td><td class="r ${cls(x.perf_3m)}">${pct(x.perf_3m,1)}</td>
+      <td class="r">${x.rs??"–"}</td><td>${stateHTML(x.state,x.days)}</td><td class="r ${cls(x.vs_ema50)}">${pct(x.vs_ema50,1)}</td><td class="r">${x.adv_m??"–"}</td></tr>`).join("")}</tbody></table>`
+      :'<div class="empty">No companies match. If every sector shows "Other", the sector data has not been downloaded yet — it arrives with the next run.</div>';
+    bindSort($("#setbl"),SE.sort,draw);
+    $("#seexp").onclick=()=>{ const out=[["ticker","name","type","exchange","sector","industry","market_cap_musd","shares_out_m","price","chg_pct","perf_1m_pct","perf_3m_pct","rs_rating","ema_trend","days_in_trend","pct_vs_ema"+EMA.exit,"avg_dollar_volume_musd","date"]];
+      for(const x of sortRows(rows,SE.sort.k,SE.sort.d)) out.push([x.ticker,x.name,x.type,x.exchange,x.sector,x.industry,x.mcap_m,x.shares_m,x.close,x.chg,x.perf_1m,x.perf_3m,x.rs,x.state==="L"?"up":x.state==="S"?"down":"",x.days,x.vs_ema50,x.adv_m,fd(st.date)]);
+      const tag=SE.group||SE.industry||SE.sector||"all"; saveCSV(`companies_${tag.replace(/[^\w]+/g,"-")}_${fd(st.date)}.csv`,out); };
+  };
+  set("#seg",SE.group); set("#sesec",SE.sector); fillInd(); set("#seex",SE.exchange); set("#setype",SE.type); set("#secap",SE.cap); $("#seliq").checked=SE.liquid; $("#seq").value=SE.q;
+  $("#seg").onchange=e=>{ SE.group=e.target.value; if(SE.group){ SE.sector=""; SE.industry=""; set("#sesec",""); fillInd(); } draw(); };
+  $("#sesec").onchange=e=>{ SE.sector=e.target.value; SE.group=""; set("#seg",""); fillInd(); draw(); };
+  $("#seind").onchange=e=>{ SE.industry=e.target.value; draw(); };
+  $("#seex").onchange=e=>{ SE.exchange=e.target.value; draw(); }; $("#setype").onchange=e=>{ SE.type=e.target.value; draw(); };
+  $("#secap").onchange=e=>{ SE.cap=e.target.value; draw(); }; $("#seliq").onchange=e=>{ SE.liquid=e.target.checked; draw(); }; $("#seq").oninput=e=>{ SE.q=e.target.value; draw(); };
+  $("#seclr").onclick=()=>{ Object.assign(SE,{group:"",sector:"",industry:"",exchange:"",type:"",cap:"",liquid:false,q:""}); location.hash="#sectors"; viewSectors(""); };
+  draw();
 }
 
 /* ------------------------------------------------------------------ DOWNLOAD */
@@ -807,7 +887,7 @@ async function route(){
   if(PF.eq&&r!=="portfolio"){ PF.eq.destroy(); PF.eq=null; }
   try{
     if(r==="scanner") await viewScanner(); else if(r==="chart") await viewChart(arg&&decodeURIComponent(arg),arg2);
-    else if(r==="watchlist") await viewWatchlist(); else if(r==="download") await viewDownload(); else if(r==="rotation") await viewRotation(); else await viewPortfolio();
+    else if(r==="watchlist") await viewWatchlist(); else if(r==="download") await viewDownload(); else if(r==="sectors") await viewSectors(arg==="group"?decodeURIComponent(arg2||""):""); else if(r==="rotation") await viewRotation(); else await viewPortfolio();
   }catch(e){ console.error(e); $("#main").innerHTML=`<div class="empty">Could not load this page (${esc(e.message)}).</div>`; }
 }
 window.addEventListener("hashchange",route);

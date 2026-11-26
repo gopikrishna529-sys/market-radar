@@ -217,6 +217,11 @@ def update_reference(client, force=False):
         print(f"splits: {len(new)} fetched since {since}")
     except MassiveError as e:
         print(f"splits not updated ({e}) - continuing without new split adjustments")
+    try:                                    # sector / industry / market cap (free sources, not Massive)
+        from .profiles import update_profiles
+        update_profiles(load_all_tickers(), meta)
+    except Exception as e:
+        print(f"profiles not updated ({str(e)[:120]})")
     _save_meta(meta)
 
 

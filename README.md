@@ -10,6 +10,7 @@ Scans **every US stock** after each market close and:
   - **Scanner**: the daily lists, with history by date
   - **Chart**: a daily candle chart for any stock (70 candles by default), with EMA 9/20/50/100/200, volume, MACD, DMI/ADX, trend shading, 20-day-high breakout marks, the strategy's BUY/EXIT markers, price zoom on every pane and a measure tool
   - **Watchlist**: your own lists, saved in your browser (Export/Import to move them between computers)
+  - **Sectors**: every ticker by sector, industry, exchange, type and market cap (from the free Nasdaq screener, refreshed daily), with breadth per industry; each rotation ETF links to its group of stocks
   - **Sector Rotation**: sector and industry ETFs ranked against SPY
   - **Download**: CSV files of the whole US market for any day, any ticker's full history (with indicators), the strategy trade log and the scanner lists
   - **Search** (top right, or press `/`): matches tickers and company names; hovering over any ticker shows a mini chart

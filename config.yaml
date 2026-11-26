@@ -85,3 +85,28 @@ chart:
 report:
   max_rows_email: 40             # rows per list in the email (website shows all)
   site_title: "Market Radar"
+
+# Sectors tab: which stocks belong to each rotation ETF's group
+# (matched on the sector name, or on words in the industry name)
+groups:
+  XLK: {sector: "Technology"}
+  XLF: {sector: "Finance"}
+  XLV: {sector: "Health Care"}
+  XLY: {sector: "Consumer Discretionary"}
+  XLP: {sector: "Consumer Staples"}
+  XLE: {sector: "Energy"}
+  XLI: {sector: "Industrials"}
+  XLB: {sector: "Basic Materials"}
+  XLU: {sector: "Utilities"}
+  XLRE: {sector: "Real Estate"}
+  XLC: {sector: "Telecommunications"}
+  SMH: {industry: ["semiconductor"]}
+  IGV: {industry: ["software", "edp services"]}
+  XBI: {industry: ["biotechnology", "biological products", "pharmaceutical preparations"]}
+  KRE: {industry: ["banks", "savings institutions"]}
+  ITB: {industry: ["homebuilding", "building products", "home furnishings", "building materials"]}
+  XRT: {industry: ["retail", "department", "clothing", "apparel", "catalog"]}
+  XOP: {industry: ["oil & gas production", "oil and gas", "integrated oil", "crude petroleum"]}
+  GDX: {industry: ["precious metals", "gold"]}
+  ITA: {industry: ["aerospace", "military", "ordnance"]}
+  JETS: {industry: ["airline", "air transport", "air freight"]}
