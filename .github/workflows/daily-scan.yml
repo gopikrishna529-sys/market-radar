@@ -16,6 +16,7 @@ permissions:
   contents: write
   pages: write
   id-token: write
+  actions: read
 
 concurrency:
   group: daily-scan
@@ -59,7 +60,11 @@ jobs:
           git rm -r -q --cached --ignore-unmatch site
           git add -A -- . ':!site' ':!**/__pycache__' ':!results/backtest.json'
           git diff --cached --quiet || git commit -m "Scan $(date -u +%Y-%m-%d)"
-          git push
+          for i in 1 2 3; do
+            git pull --rebase -X theirs origin main && git push && break
+            echo "push failed, retrying in 15s"; sleep 15
+          done
+          git push    # shows an error if all retries failed
 
       - name: Prepare website
         if: steps.run.outputs.site == 'yes'
@@ -70,4 +75,13 @@ jobs:
       - name: Publish website
         if: steps.run.outputs.site == 'yes'
         id: deploy
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+
+      - name: Wait before retrying publish
+        if: steps.run.outputs.site == 'yes' && steps.deploy.outcome == 'failure'
+        run: sleep 60
+
+      - name: Publish website (retry)
+        if: steps.run.outputs.site == 'yes' && steps.deploy.outcome == 'failure'
         uses: actions/deploy-pages@v4
