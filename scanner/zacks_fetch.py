@@ -60,7 +60,8 @@ def human_click(page, loc, wander=True):
     page.mouse.move(x, y, steps=random.randint(10, 25))
     pause(0.15, 0.5)
     if not _on_target(loc, x, y):
-        # something (e.g. an open menu) is covering the target: step aside, let it close, come straight back
+        # something is covering the target (a pop-up or an open menu): close pop-ups / step aside, come back
+        dismiss_popups(page)
         page.mouse.move(x + 260, y + 220, steps=8)
         pause(0.8, 1.4)
         box = loc.bounding_box() or box
@@ -147,15 +148,35 @@ def first_visible(scope, selectors, timeout=8000):
     return None
 
 
-def dismiss_popups(page):
-    for s in ["button:has-text('Accept')", "button:has-text('I Agree')", "button:has-text('No thanks')",
-              "[aria-label='Close']", "button.close"]:
-        try:
-            loc = page.locator(s)
-            if loc.count() and loc.first.is_visible():
-                loc.first.click(timeout=2000)
-        except Exception:
-            pass
+POPUP_CLOSERS = [
+    "#web-notification-pop-up button.block_notification",   # Zacks "show you notifications?" -> Cancel
+    ".web-notification-modal button:text-is('Cancel')",
+    "button:text-is('Reject All')", "button:has-text('Reject')", "button:has-text('Decline')",
+    "button:has-text('Necessary only')", "button:has-text('No thanks')", "button:has-text('Not now')",
+    "[aria-label='Close']", "button.close",
+]
+
+
+def dismiss_popups(page, wait=0.0):
+    """Close pop-ups the way a person would: 'Cancel' on the notifications prompt, 'Reject' on cookie
+    banners, the X on anything else. Never 'Allow' or 'Accept'. Returns True if something was closed."""
+    closed = False
+    end = time.time() + wait
+    while True:
+        for sel in POPUP_CLOSERS:
+            try:
+                loc = page.locator(sel)
+                if loc.count() and loc.first.is_visible():
+                    pause(0.6, 1.5)                       # notice it, then react
+                    loc.first.click(delay=random.randint(50, 140), timeout=3000)
+                    print("closed a pop-up:", sel.split(" ")[0])
+                    closed = True
+                    pause(0.5, 1.2)
+            except Exception:
+                pass
+        if closed or time.time() >= end:
+            return closed
+        time.sleep(0.5)
 
 
 def logged_in(page):
@@ -179,6 +200,7 @@ def open_screener(page):
         dismiss_popups(page)
     if "/screening" not in page.url or "stock-screener" in page.url:
         page.mouse.wheel(0, -3000)                 # top bar is at the top of the page
+        dismiss_popups(page, wait=4)               # the notifications prompt appears a few seconds late
         pause(0.8, 1.6)
         top = first_visible(page, ["a:text-is('Screening')"], 8000)
         if top:
