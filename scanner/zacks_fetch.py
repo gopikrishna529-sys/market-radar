@@ -35,8 +35,17 @@ def pause(lo=0.8, hi=2.4):
     time.sleep(random.uniform(lo, hi))
 
 
+FORBIDDEN = ("delete", "remove", "logout", "update", "save")
+
+
 def human_click(page, loc):
-    """Scroll to the element, glide the mouse to a random point inside it, hesitate, click."""
+    """Scroll to the element, glide the mouse to a random point inside it, hesitate, click.
+    Refuses to click anything that could change the account (Delete, Remove, Save, ...)."""
+    label = " ".join(filter(None, [loc.inner_text(timeout=3000) if loc.count() else "",
+                                   loc.get_attribute("id") or "", loc.get_attribute("class") or "",
+                                   loc.get_attribute("onclick") or ""])).lower()
+    if any(w in label for w in FORBIDDEN) and "btn_run_" not in label and "buttons-csv" not in label:
+        raise RuntimeError(f"safety stop: refused to click '{label[:80]}'")
     loc.scroll_into_view_if_needed(timeout=10000)
     pause(0.3, 0.9)
     box = loc.bounding_box()
@@ -194,56 +203,57 @@ def run_saved_screen(page, name):
     fr = screener_frame(page)
     if not fr:
         raise RuntimeError("screener frame not found")
-    tab = first_visible(fr, ["text=My Screens", "text=My Screen", "a:has-text('MY SCREEN')"], 20000)
+    tab = first_visible(fr, ["#my-screen-tab a", "a:text-is('My Screen')", "a:text-is('My Screens')"], 20000)
     if not tab:
-        raise RuntimeError("'My Screens' tab not found")
+        raise RuntimeError("'My Screen' tab not found")
     human_click(page, tab)
+    fr.wait_for_selector("#screenlist a[id^='btn_run_']", timeout=30000)
     pause(2, 4)
     snap(page, "my-screens")
+    rows = fr.locator("#screenlist tbody tr")
+    names = [rows.nth(i).locator("th").inner_text().strip() for i in range(rows.count())]
+    print("saved screens:", ", ".join(names))
     if name:
-        row = first_visible(fr, [f"tr:has-text('{name}')", f"li:has-text('{name}')", f"div:has-text('{name}') >> nth=-1"], 15000)
-        if not row:
-            raise RuntimeError(f"saved screen '{name}' not found under My Screens")
-        run = row.locator("a:has-text('Run'), button:has-text('Run'), input[value*='Run' i]")
-        human_click(page, run.first if run.count() else fr.get_by_text(name, exact=True).first)
+        idx = next((i for i, n in enumerate(names) if n.lower() == name.lower()), None)
+        if idx is None:
+            raise RuntimeError(f"saved screen '{name}' not found (have: {', '.join(names)})")
     else:
-        run = first_visible(fr, ["a:has-text('Run')", "button:has-text('Run')", "input[value*='Run' i]"], 15000)
-        if not run:
-            raise RuntimeError("no saved screen with a Run button found")
-        human_click(page, run)
-    # results appear in a table in the same frame
-    pause(6, 10)
-    fr = screener_frame(page)
-    fr.wait_for_selector("table tbody tr", timeout=90000)
+        idx = 0
+    run = rows.nth(idx).locator("a[id^='btn_run_']")       # only ever the Run button
+    print(f"running saved screen '{names[idx]}'")
+    human_click(page, run)
+    # results are ready when the CSV button of the results table shows
+    fr.wait_for_selector("#screener_table_wrapper .buttons-csv", state="visible", timeout=120000)
+    pause(3, 6)
+    try:
+        print("results:", fr.locator("#runscreen_result").inner_text().split("\n")[0][:120])
+    except Exception:
+        pass
     snap(page, "results")
     return fr
 
 
 def download_csv(page, fr, dest):
-    btn = first_visible(fr, ["a:has-text('CSV')", "button:has-text('CSV')", "[title*='CSV' i]",
-                             "a:has-text('Export')", "button:has-text('Export')", "[class*='csv' i]"], 15000)
+    btn = first_visible(fr, ["#screener_table_wrapper a.buttons-csv"], 15000)
     if btn:
         try:
             pause(1.5, 4)          # "look" at the results first
-            with page.expect_download(timeout=60000) as dl:
+            with page.expect_download(timeout=90000) as dl:
                 human_click(page, btn)
             dl.value.save_as(str(dest))
             print("downloaded the CSV export")
             return
         except PWTimeout:
-            print("CSV button gave no download - reading the results table instead")
-    else:
-        print("no CSV button found - reading the results table instead")
-    rows = fr.evaluate("""() => {
-        const t = [...document.querySelectorAll('table')].sort((a,b)=>b.rows.length-a.rows.length)[0];
-        if (!t) return [];
-        return [...t.rows].map(r => [...r.cells].map(c => c.innerText.trim()));
+            print("CSV click gave no download - asking Zacks' export link directly")
+    # same request the CSV button makes, from inside the signed-in screener page
+    text = fr.evaluate("""async () => {
+        const r = await fetch('https://screener-api.zacks.com/export.php', {credentials: 'include'});
+        return await r.text();
     }""")
-    if len(rows) < 2:
-        raise RuntimeError("results table is empty")
-    with open(dest, "w", newline="") as f:
-        csv.writer(f).writerows(rows)
-    print(f"saved {len(rows) - 1} rows from the results table (only the rows shown on the page)")
+    if not text or text.lstrip().startswith("<"):
+        raise RuntimeError("Zacks export returned no CSV")
+    dest.write_text(text)
+    print("saved the CSV from Zacks' export link")
 
 
 def main():
