@@ -1,7 +1,6 @@
 """Builds the daily email and the static website."""
 import json
 import os
-import shutil
 import smtplib
 import ssl
 from email.mime.multipart import MIMEMultipart
@@ -12,26 +11,12 @@ from pathlib import Path
 from .config import CONFIG
 
 ROOT = Path(__file__).resolve().parent.parent
-SITE = ROOT / "site"
-RESULTS = ROOT / "results"
-TEMPLATE = Path(__file__).resolve().parent / "site_template.html"
 
 
-# ---------------------------------------------------------------- website
-def build_site(result):
-    (SITE / "data").mkdir(parents=True, exist_ok=True)
-    for f in RESULTS.glob("20*.json"):
-        dst = SITE / "data" / f.name
-        if not dst.exists() or f.name == f"{result['date']}.json":
-            shutil.copy(f, dst)
-    dates = sorted((p.stem for p in (SITE / "data").glob("20*.json")), reverse=True)
-    (SITE / "data" / "dates.json").write_text(json.dumps(dates))
-    html = TEMPLATE.read_text()
-    html = html.replace("__TITLE__", escape(CONFIG["report"]["site_title"]))
-    html = html.replace("__LATEST__", json.dumps(result).replace("</", "<\\/"))
-    html = html.replace("__DATES__", json.dumps(dates))
-    (SITE / "index.html").write_text(html)
-    print(f"website updated: site/index.html ({len(dates)} days of history)")
+def fmt_date(iso):
+    """2026-11-25 -> 25-Nov-26 (the format used everywhere in emails and on the website)."""
+    import datetime as _dt
+    return _dt.date.fromisoformat(iso[:10]).strftime("%d-%b-%y")
 
 
 # ---------------------------------------------------------------- email
@@ -90,7 +75,7 @@ def _sector_table(rows):
     return "".join(out)
 
 
-def build_email(result):
+def build_email(result, bt=None):
     lim = CONFIG["report"]["max_rows_email"]
     b = result["benchmark"]
     site = os.environ.get("SITE_URL", "")
@@ -98,12 +83,13 @@ def build_email(result):
     rotating_in = [r for r in result["sectors"] + result["industries"] if r["quadrant"] == "Improving"]
     parts = [
         '<div style="font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:820px;color:#222">',
-        f'<h1 style="font-size:20px;margin:0 0 4px">Market Radar — {result["date"]}</h1>',
+        f'<h1 style="font-size:20px;margin:0 0 4px">Market Radar — {fmt_date(result["date"])}</h1>',
         f'<p style="margin:0 0 4px;color:#444">{b["ticker"]} {b["close"]} '
         f'<span style="color:{_color(b["chg"])}">{_fmt(b["chg"], "%")}</span> · '
         f'{result["universe_size"]} stocks scanned · {result["breadth"]["pct_in_trend"]}% in EMA trend · '
         f'{result["breadth"]["pct_above_ema200"]}% above 200 EMA</p>',
         f'<p style="margin:0 0 8px"><a href="{site}">Open the full website →</a></p>' if site else "",
+        _strategy_section(bt, h2, site),
         f'<h2 {h2}>🚀 EMA trend + {CONFIG["breakout"]["lookback_days"]}-day breakout ({len(result["breakouts"])})</h2>',
         _stock_table(result["breakouts"], lim),
     ]
@@ -129,14 +115,42 @@ def build_email(result):
         'RS = relative strength rating 1–99 vs all scanned stocks. Vol x = volume vs 50-day average. '
         'Not financial advice.</p></div>',
     ]
-    subject = (f"Market Radar {result['date']}: {len(result['breakouts'])} breakouts, "
+    subject = (f"Market Radar {fmt_date(result['date'])}: {len(result['breakouts'])} breakouts, "
                f"{len(result['rs_days'])} RS-day, {len(result['rs_leaders'])} RS leaders")
     return subject, "".join(parts)
 
 
-def send_email(result):
+def _strategy_section(bt, h2, site):
+    if not bt:
+        return ""
+    nx = bt.get("next_open", {})
+    m = (bt.get("modes", {}).get("both") or {})
+    st, sp = m.get("stats", {}), m.get("spy_stats", {})
+    longs = [x for x in nx.get("enter", []) if x["side"] == "long"]
+    shorts = [x for x in nx.get("enter", []) if x["side"] == "short"]
+    exits = [x for x in nx.get("exit", []) if "b" in (x.get("in_pf") or "")]   # portfolio positions
+
+    def names(rows, k=25):
+        s = ", ".join(f'<b>{escape(r["ticker"])}</b>' for r in rows[:k])
+        return s + (f" … +{len(rows) - k} more" if len(rows) > k else "") if rows else "none"
+    exit_txt = ", ".join(f'<b>{escape(r["ticker"])}</b> ({r["side"]}, '
+                         f'<span style="color:{_color(r["pnl"])}">{_fmt(r["pnl"], "%")}</span>)'
+                         for r in exits[:30]) or "none"
+    since = fmt_date(m["dates"][0]) if m.get("dates") else "–"
+    return (f'<h2 {h2}>📋 Strategy — orders for the next open</h2>'
+            f'<p style="margin:2px 0">Buy (EMA trend just set, strongest RS first): {names(longs)}</p>'
+            f'<p style="margin:2px 0">Short (EMA downtrend just set): {names(shorts)}</p>'
+            f'<p style="margin:2px 0 8px">Close portfolio positions (closed beyond EMA50 today): {exit_txt}</p>'
+            f'<p style="margin:0 0 16px;font-size:12px;color:#555">Backtest portfolio since {since}: '
+            f'<b style="color:{_color(st.get("total"))}">{_fmt(st.get("total"), "%")}</b> vs SPY '
+            f'{_fmt(sp.get("total"), "%")} · max drawdown {_fmt(st.get("max_dd"), "%")} · '
+            f'win rate {m.get("trade_stats", {}).get("win_rate", "–")}%'
+            + (f' · <a href="{site}#portfolio">details</a>' if site else "") + "</p>")
+
+
+def send_email(result, bt=None):
     user, pwd, to = (os.environ.get(k) for k in ("SMTP_USER", "SMTP_PASSWORD", "EMAIL_TO"))
-    subject, html = build_email(result)
+    subject, html = build_email(result, bt)
     (ROOT / "results" / "last_email.html").write_text(html)
     if not (user and pwd and to):
         print("email not sent: SMTP_USER / SMTP_PASSWORD / EMAIL_TO not set (saved results/last_email.html)")

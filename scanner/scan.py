@@ -1,4 +1,4 @@
-"""The scan itself: EMA trend, 20-day breakouts, relative strength, sector rotation."""
+"""The daily scan: EMA trend, 20-day breakouts, relative strength, sector rotation."""
 import json
 from pathlib import Path
 
@@ -6,19 +6,10 @@ import numpy as np
 import pandas as pd
 
 from .config import CONFIG
-from .data_store import load_panel, load_tickers
+from .data_store import load_tickers
+from .indicators import rs_rating, streak
 
 RESULTS = Path(__file__).resolve().parent.parent / "results"
-
-
-def _ema(df, span):
-    return df.ewm(span=span, adjust=False, min_periods=span).mean()
-
-
-def _streak(mask):
-    """Consecutive True count ending at the last row, per column."""
-    rev = mask.iloc[::-1].fillna(False).astype(int)
-    return rev.cumprod().sum()
 
 
 def _pct(a, b):
@@ -26,85 +17,78 @@ def _pct(a, b):
 
 
 def _rnd(x, n=2):
-    return None if x is None or (isinstance(x, float) and not np.isfinite(x)) else round(float(x), n)
+    try:
+        x = float(x)
+    except (TypeError, ValueError):
+        return None
+    return round(x, n) if np.isfinite(x) else None
 
 
-def run_scan():
+def scan_universe(w, ind):
+    """Tickers that pass the scan filters on the last day."""
+    u = CONFIG["universe"]
+    c = w["close"]
+    tick = load_tickers()
+    ok = (c.columns.isin(tick["ticker"])
+          & (c.iloc[-1] >= u["min_price"]).values
+          & (ind["avg_vol"].iloc[-1] >= u["min_avg_volume"]).values
+          & (c.notna().sum() >= u["min_history_days"]).values)
+    return c.columns[ok]
+
+
+def run_scan(w, ind):
     cfg = CONFIG
-    w = load_panel()
     c, h, v = w["close"], w["high"], w["volume"]
     bench = cfg["relative_strength"]["benchmark"]
     if bench not in c:
         raise RuntimeError(f"Benchmark {bench} missing from data")
     date = c.index[-1]
     spy = c[bench]
-
-    # --- indicators --------------------------------------------------------
-    e = cfg["ema"]
-    ef, em, es = _ema(c, e["fast"]), _ema(c, e["mid"]), _ema(c, e["slow"])
-    L = e["rising_lookback"]
-    trend = (c > ef) & (ef > em) & (em > es) & (ef > ef.shift(L)) & (em > em.shift(L))
+    ef, es = ind["ema_fast"], ind["ema_slow"]
+    trend = ind["long_trend"]
 
     N = cfg["breakout"]["lookback_days"]
     prior_high = h.shift(1).rolling(N, min_periods=N).max()
     breakout = trend & (c > prior_high)
-
-    avg_vol = v.rolling(50, min_periods=20).mean()
-    chg = c.pct_change(fill_method=None) * 100
-
-    # RS rating (IBD style weighting of 3/6/9/12-month performance, ranked 1-99)
+    avg_vol, chg = ind["avg_vol"], ind["chg"]
     last = c.iloc[-1]
-    def perf(n):
-        n = min(n, len(c) - 1)
-        return last / c.iloc[-1 - n] - 1
-    score = 0.4 * perf(63) + 0.2 * perf(126) + 0.2 * perf(189) + 0.2 * perf(252)
 
     rs_line = c.div(spy, axis=0)
     rs_new_high = rs_line.iloc[-1] >= rs_line.iloc[-50:].max()
 
-    # --- universe ------------------------------------------------------------
-    u = cfg["universe"]
-    tick = load_tickers().set_index("ticker")
-    names = tick["name"].to_dict()
-    history = c.notna().sum()
-    in_universe = (
-        c.columns.isin(tick.index)
-        & (last >= u["min_price"]).values
-        & (avg_vol.iloc[-1] >= u["min_avg_volume"]).values
-        & (history >= u["min_history_days"]).values
-    )
-    uni = c.columns[in_universe]
-    rating = score[uni].rank(pct=True).mul(98).add(1).round()
+    uni = scan_universe(w, ind)
+    names = load_tickers().set_index("ticker")["name"].to_dict()
+    rating = rs_rating(ind["score"].iloc[-1], uni)
 
     spy_chg = float(chg[bench].iloc[-1])
-    days_trend = _streak(trend[uni])
+    days_trend = streak(trend[uni])
     t_last, b_last = trend[uni].iloc[-1], breakout[uni].iloc[-1]
 
     def row(t):
+        r = rating.get(t)
         return {
             "ticker": t,
             "name": names.get(t, ""),
             "close": _rnd(last[t]),
             "chg": _rnd(chg[t].iloc[-1]),
             "vol_ratio": _rnd(v[t].iloc[-1] / avg_vol[t].iloc[-1]),
-            "rs": int(rating.get(t, 0)) if pd.notna(rating.get(t)) else None,
+            "rs": int(r) if pd.notna(r) else None,
             "rs_high": bool(rs_new_high.get(t, False)),
             "days_trend": int(days_trend.get(t, 0)),
             "ext_ema20": _rnd(_pct(last[t], ef[t].iloc[-1]), 1),
             "perf_1m": _rnd(_pct(last[t], c[t].iloc[-22]), 1) if len(c) > 22 else None,
         }
 
-    trend_list = sorted((row(t) for t in uni[t_last.fillna(False).values]),
-                        key=lambda r: -(r["rs"] or 0))
-    breakout_list = sorted((row(t) for t in uni[b_last.fillna(False).values]),
-                           key=lambda r: -(r["rs"] or 0))
+    by_rs = lambda r: -(r["rs"] or 0)
+    trend_list = sorted((row(t) for t in uni[t_last.fillna(False).values]), key=by_rs)
+    breakout_list = sorted((row(t) for t in uni[b_last.fillna(False).values]), key=by_rs)
     rs_days = []
     if spy_chg < 0:
         up = chg[uni].iloc[-1] > cfg["relative_strength"]["rs_day_min_gain_pct"]
         rs_days = sorted((row(t) for t in uni[up.fillna(False).values]), key=lambda r: -(r["chg"] or 0))
     min_rs = cfg["relative_strength"]["leaders_min_rating"]
-    leaders = sorted((row(t) for t in rating[rating >= min_rs].index), key=lambda r: -(r["rs"] or 0))
-    leaders = [r for r in leaders if r["rs_high"]]  # RS line at a 50-day high too
+    leaders = [row(t) for t in rating[uni][rating[uni] >= min_rs].index]
+    leaders = sorted((r for r in leaders if r["rs_high"]), key=by_rs)
 
     result = {
         "date": date.strftime("%Y-%m-%d"),
@@ -144,18 +128,16 @@ def sector_rotation(c, spy, etfs, kind):
 
         def rel(n):
             return _rnd(100 * (ratio.iloc[-1] / ratio.iloc[-1 - n] - 1), 1)
-        tail = [{"x": _rnd(rs_ratio.iloc[i], 2), "y": _rnd(rs_mom.iloc[i], 2)}
-                for i in range(-26, -1, 5)]  # ~5 weekly points before today
-        prev_1m = _rnd(100 * (ratio.iloc[-6] / ratio.iloc[-27] - 1), 1)  # 1-month rel. perf a week ago
+        tail = [{"x": _rnd(rs_ratio.iloc[i], 2), "y": _rnd(rs_mom.iloc[i], 2)} for i in range(-26, -1, 5)]
+        prev_1m = _rnd(100 * (ratio.iloc[-6] / ratio.iloc[-27] - 1), 1)
         out.append({"ticker": etf, "name": name, "kind": kind, "close": _rnd(c[etf].iloc[-1]),
                     "rel_1w": rel(5), "rel_1m": rel(21), "rel_3m": rel(63), "_prev_1m": prev_1m,
                     "rs_ratio": _rnd(rr), "rs_mom": _rnd(rm), "quadrant": quadrant, "tail": tail})
-    # rank by 1-month relative performance; compare with rank a week ago
-    out.sort(key=lambda r: -(r["rel_1m"] or -999))
+    out.sort(key=lambda r: -(r["rel_1m"] if r["rel_1m"] is not None else -999))
     prev = sorted(out, key=lambda r: -(r["_prev_1m"] if r["_prev_1m"] is not None else -999))
     prev_rank = {r["ticker"]: i + 1 for i, r in enumerate(prev)}
     for i, r in enumerate(out):
         r["rank"] = i + 1
-        r["rank_change"] = prev_rank[r["ticker"]] - (i + 1)   # positive = moved up
+        r["rank_change"] = prev_rank[r["ticker"]] - (i + 1)
         del r["_prev_1m"]
     return out

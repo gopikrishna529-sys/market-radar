@@ -7,6 +7,12 @@ api:
   base_url: "https://api.massive.com"
   requests_per_minute: 5
 
+# How much history to keep. "auto" = as far back as the plan allows (plan_years).
+# Free plan: 2 years. On a paid plan set plan_years: 5 (Starter) and press Run workflow once.
+history:
+  start: auto
+  plan_years: 2
+
 # Which stocks to scan
 universe:
   ticker_types: ["CS", "ADRC"]   # CS = common stock, ADRC = ADRs. ETFs are excluded.
@@ -57,6 +63,20 @@ industries:
   GDX: Gold Miners
   ITA: Aerospace & Defense
   JETS: Airlines
+
+# Portfolio backtest (Portfolio tab)
+#   Long : EMA trend becomes set -> buy next open;  exit next open after a close BELOW the EMA mid (50)
+#   Short: EMA downtrend becomes set -> short next open; exit next open after a close ABOVE the EMA mid (50)
+backtest:
+  sides: ["long", "short"]
+  max_positions: 20              # portfolio slots, each = 1/20 of the account at entry
+  cost_per_side_pct: 0.05        # commission + slippage per buy/sell, in %
+
+# Chart page: which tickers get a chart file
+chart:
+  min_price: 1.0
+  min_avg_volume: 50000
+  extra_tickers: ["QQQ", "IWM", "DIA", "TLT", "GLD"]
 
 # Report
 report:

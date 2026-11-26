@@ -13,7 +13,6 @@ import os
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-import numpy as np
 import pandas as pd
 
 from .massive import MassiveError
@@ -79,7 +78,7 @@ def update_prices(client):
     """
     today = ny_today()
     have = stored_dates()
-    closed = closed_days()
+    closed = closed_days() | unavailable_days()
     start = have[-1] + dt.timedelta(days=1) if have else today - dt.timedelta(days=BACKFILL_CALENDAR_DAYS)
     todo = [start + dt.timedelta(days=i) for i in range((today - start).days + 1)]
     todo = [d for d in todo if d.weekday() < 5 and d.isoformat() not in closed]
@@ -96,7 +95,8 @@ def update_prices(client):
             if recent:
                 print(f"{d}: not available yet ({e}); will retry on the next run")
                 break
-            print(f"{d}: skipped ({e})")
+            print(f"{d}: skipped ({str(e)[:80]})")
+            _add_unavailable_day(d)
             continue
         if not results:
             if d == today:
@@ -115,6 +115,62 @@ def update_prices(client):
         added.append(d)
         print(f"{d}: saved {n} tickers  [{i + 1}/{len(todo)}]")
     return added
+
+
+def history_start():
+    """First date we want history from (config history.start, or 'auto' = what the plan allows)."""
+    from .config import CONFIG
+    start = str((CONFIG.get("history") or {}).get("start", "auto"))
+    if start == "auto":
+        years = float((CONFIG.get("history") or {}).get("plan_years", 2))
+        return ny_today() - dt.timedelta(days=int(365 * years) - 5)
+    return dt.date.fromisoformat(start)
+
+
+def backfill_history(client):
+    """Download older days (before the first stored day) back to history_start().
+
+    Used on manual runs. Days the plan does not allow are remembered and not asked again.
+    """
+    have = stored_dates()
+    if not have:
+        return []
+    start, first = history_start(), have[0]
+    skip = closed_days() | unavailable_days()
+    todo = [start + dt.timedelta(days=i) for i in range((first - start).days)]
+    todo = [d for d in todo if d.weekday() < 5 and d.isoformat() not in skip]
+    if not todo:
+        print(f"history already complete back to {start}")
+        return []
+    print(f"Backfilling older history: {len(todo)} weekdays from {start} to {first} "
+          f"(~{len(todo) * 13 // 60} minutes on the free plan)")
+    added = []
+    for i, d in enumerate(todo):
+        try:
+            results = client.grouped_daily(d.isoformat())
+        except MassiveError as e:
+            print(f"{d}: not available on this plan ({str(e)[:80]})")
+            _add_unavailable_day(d)
+            continue
+        if not results:
+            print(f"{d}: market closed")
+            _add_closed_day(d)
+            continue
+        n = _save_day(d, results)
+        added.append(d)
+        print(f"{d}: saved {n} tickers  [{i + 1}/{len(todo)}]")
+    return added
+
+
+def unavailable_days():
+    f = REF / "unavailable_days.txt"
+    return set(f.read_text().split()) if f.exists() else set()
+
+
+def _add_unavailable_day(d):
+    REF.mkdir(parents=True, exist_ok=True)
+    days = unavailable_days() | {d.isoformat()}
+    (REF / "unavailable_days.txt").write_text("\n".join(sorted(days)) + "\n")
 
 
 def update_reference(client, force=False):
@@ -140,8 +196,12 @@ def update_reference(client, force=False):
     # splits - every run, small incremental window
     splits_file = REF / "splits.csv"
     last = meta.get("splits_updated")
-    since = (dt.date.fromisoformat(last) - dt.timedelta(days=14)) if last else \
-        today - dt.timedelta(days=BACKFILL_CALENDAR_DAYS + 30)
+    need_from = history_start() - dt.timedelta(days=30)
+    have_from = dt.date.fromisoformat(meta["splits_from"]) if meta.get("splits_from") else None
+    if last and have_from and have_from <= need_from:
+        since = dt.date.fromisoformat(last) - dt.timedelta(days=14)
+    else:
+        since = need_from                      # first time, or history was extended further back
     try:
         new = client.splits(since.isoformat())
         new = pd.DataFrame(new, columns=["ticker", "execution_date", "split_from", "split_to"])
@@ -149,29 +209,34 @@ def update_reference(client, force=False):
         allsp = pd.concat([old, new]).drop_duplicates(["ticker", "execution_date"], keep="last")
         allsp.sort_values("execution_date").to_csv(splits_file, index=False)
         meta["splits_updated"] = today.isoformat()
+        if since <= need_from:
+            meta["splits_from"] = since.isoformat()
         print(f"splits: {len(new)} fetched since {since}")
     except MassiveError as e:
         print(f"splits not updated ({e}) - continuing without new split adjustments")
     _save_meta(meta)
 
 
-def load_panel(days=320):
-    """Load the last `days` trading days as wide DataFrames (index=date, columns=ticker).
+def load_panel(days=None):
+    """Load stored trading days as wide DataFrames (index=date, columns=ticker).
 
     Prices are adjusted for splits so EMAs and breakouts are not distorted.
     """
-    files = sorted(DAILY.glob("*/*.csv.gz"))[-days:]
+    files = sorted(DAILY.glob("*/*.csv.gz"), key=lambda p: p.name)
+    if days:
+        files = files[-days:]
     if not files:
         raise RuntimeError("No price data stored yet")
     frames = []
     for f in files:
-        df = pd.read_csv(f, usecols=["ticker", "high", "low", "close", "volume"])
+        df = pd.read_csv(f, usecols=["ticker", "open", "high", "low", "close", "volume"],
+                         dtype={"ticker": str})
         df["date"] = pd.Timestamp(f.name[:10])
         frames.append(df)
     long = pd.concat(frames, ignore_index=True).dropna(subset=["ticker"])
     long = long.drop_duplicates(["date", "ticker"])
-    wide = {c: long.pivot(index="date", columns="ticker", values=c).sort_index()
-            for c in ["high", "low", "close", "volume"]}
+    wide = {c: long.pivot(index="date", columns="ticker", values=c).sort_index().astype("float64")
+            for c in ["open", "high", "low", "close", "volume"]}
 
     splits_file = REF / "splits.csv"
     if splits_file.exists():
@@ -185,7 +250,7 @@ def load_panel(days=320):
             before = idx < pd.Timestamp(row.execution_date)
             if not before.any() or before.all():
                 continue
-            for c in ["high", "low", "close"]:
+            for c in ["open", "high", "low", "close"]:
                 wide[c].loc[before, row.ticker] *= factor
             wide["volume"].loc[before, row.ticker] /= factor
     return wide

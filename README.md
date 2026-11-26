@@ -5,7 +5,12 @@ Scans **every US stock** after each market close and:
 - finds **EMA trend + 20-day breakouts**
 - lists stocks that went **up while SPY was down**, and **RS leaders** (RS rating ≥ 80 with the RS line at a 50-day high)
 - ranks **sector and industry rotation** against SPY
-- **emails you** the lists and **updates a website**
+- **emails you** the lists and the strategy's orders for the next open, and **updates a website** with:
+  - **Portfolio**: a backtest of the EMA-trend strategy (long and short), with an equity curve vs SPY, drawdown, monthly returns, max run-up / max drawdown per trade, every trade, open positions and the orders for the next open
+  - **Scanner**: the daily lists, with history by date
+  - **Chart**: a daily candle chart for any stock, with EMA 20/50/200, volume, MACD, DMI/ADX, trend shading and the strategy's buy/sell markers
+  - **Watchlist**: your own lists, saved in your browser (Export/Import to move them between computers)
+  - **Sector Rotation**: sector and industry ETFs ranked against SPY
 
 It runs on GitHub's servers, so your computer does not need to be on. Cost: $0 (GitHub Free + Massive free plan).
 
@@ -79,7 +84,18 @@ After that, it runs **by itself every weekday at 5:30 pm New York time**, with a
 - `data/daily/YYYY/YYYY-MM-DD.csv.gz`: one file per trading day for the whole US market, about 300 KB a day. This becomes your own market database.
 - `results/YYYY-MM-DD.json`: each day's scan results, so the website keeps a history you can browse by date.
 
+## Strategy rules (Portfolio tab)
+- **Long:** the EMA trend becomes set (Close > EMA20 > EMA50 > EMA200, EMA20 and EMA50 rising) → buy at the **next day's open**. Exit at the next open after a **close below the EMA50**.
+- **Short:** the mirror image → short at the next open; cover at the next open after a **close above the EMA50**.
+- 20 equal portfolio slots, 0.05% cost per side, stocks ≥ $5 and ≥ 500k average volume. When there are more signals than free slots, the strongest relative strength is taken first. All of this can be changed in `config.yaml` under `backtest:`.
+- Known limits: dividends are not included, and stocks that have since been delisted are left out, which flatters results slightly.
+
+## History length
+`history: plan_years` in `config.yaml` sets how far back the data goes. It is 2 years on the free plan, which gives about 14 months of backtest after the 200-EMA warm-up. Pressing **Run workflow** downloads any missing older days.
+
 ## Upgrading later
-If you move to a paid Massive plan, change `requests_per_minute` in `config.yaml` (for example to 100). Nothing else needs to change.
+On a paid Massive plan: set `requests_per_minute: 300` and `plan_years: 5`, then press **Run workflow** once. Five years of history then downloads in a few minutes.
+
+All dates on the website and in emails use the dd-MMM-yy format (e.g. 25-Nov-26).
 
 *Not financial advice.*
