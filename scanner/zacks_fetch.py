@@ -62,8 +62,8 @@ def human_click(page, loc, wander=True):
     if not _on_target(loc, x, y):
         # something is covering the target (a pop-up or an open menu): close pop-ups / step aside, come back
         dismiss_popups(page)
-        park_mouse(page)                       # into the page body, well clear of the tall menus
-        click_blank(page)                      # and click empty space to close a stuck menu
+        calm_menus(page)
+        park_mouse(page)                       # into the page body, well clear of the menu bar
         pause(0.4, 0.9)
         box = loc.bounding_box() or box
         x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
@@ -124,6 +124,20 @@ BLANK_JS = """([x, y]) => {
     return ['BODY','HTML','DIV','SECTION','MAIN','HEADER','P','H1','H2','H3','SPAN','TD','TR','TABLE'].includes(el.tagName)
         && !(el.textContent || '').trim().match(/^(Sign|Log|Delete|Remove|Save|Allow|Accept)/i);
 }"""
+
+
+MENU_CSS = ("#primary ul.menu, #primary .mega-menu, #navbar-collapse li.with-dd > ul, #navbar-collapse .mega-menu "
+            "{display:none !important; visibility:hidden !important; pointer-events:none !important;}")
+
+
+def calm_menus(page):
+    """Hide the green top-bar drop-down menus in THIS browser window only, so they can never pop open over
+    the screener or catch a click. (Earlier runs reached the screener and then a click landed on the open
+    Screening menu, which took the page back to /screening/.) Nothing is sent to Zacks."""
+    try:
+        page.add_style_tag(content=MENU_CSS)
+    except Exception:
+        pass
 
 
 def click_blank(page):
@@ -209,6 +223,7 @@ def first_visible(scope, selectors, timeout=8000):
 POPUP_CLOSERS = [
     "#web-notification-pop-up button.block_notification",   # Zacks "show you notifications?" -> Cancel
     ".web-notification-modal button:text-is('Cancel')",
+    "#deny_cookie", "button:text-is('Deny Optional')",               # Zacks cookie banner -> Deny Optional
     "button:text-is('Reject All')", "button:has-text('Reject')", "button:has-text('Decline')",
     "button:has-text('Necessary only')", "button:has-text('No thanks')", "button:has-text('Not now')",
     "[aria-label='Close']", "button.close",
@@ -282,7 +297,7 @@ def open_screener(page):
     park_mouse(page)
     pause(3, 6)
     dismiss_popups(page)
-    click_blank(page)                              # a stuck drop-down only closes on a click elsewhere
+    calm_menus(page)                               # drop-down menus can't cover the screener now
     print("on page:", page.url.split("?")[0])
 
 
@@ -337,6 +352,8 @@ def screener_ready(page):
         el = page.wait_for_selector("iframe[src*='screener-api.zacks.com']", state="attached", timeout=45000)
         fr = el.content_frame()
         fr.wait_for_selector("#my-screen-tab a", timeout=45000)
+        calm_menus(page)
+        park_mouse(page)
         pause(2, 4)                                   # still there a moment later = no redirect
         return "stock-screener" in page.url
     except Exception:
@@ -389,8 +406,8 @@ NEW_CSV = "#screener_table_wrapper .buttons-csv:not([data-mr-old])"   # the CSV 
 
 
 def run_saved_screen(page, name):
-    park_mouse(page)                               # make sure no menu drop-down covers the screener tabs
-    click_blank(page)
+    calm_menus(page)                               # no drop-down can cover the screener tabs
+    park_mouse(page)
     fr = get_screener(page)
     tab = first_visible(fr, ["#my-screen-tab a", "a:text-is('My Screen')", "a:text-is('My Screens')"], 20000)
     if not tab:
@@ -401,7 +418,7 @@ def run_saved_screen(page, name):
     except PWTimeout:
         print("My Screen click did not open the list - using the screener's own My Screen action")
         snap(page, "my-screen-click-missed")
-        click_blank(page)
+        calm_menus(page)
         fr.evaluate("() => openTab('my-screen')")
         fr.wait_for_selector("#screenlist a[id^='btn_run_']", timeout=30000)
     pause(2, 4)
@@ -429,7 +446,7 @@ def run_saved_screen(page, name):
             raise
         print(f"Run click did not show results - using the screener's own Run action for screen {run_id}")
         snap(page, "run-click-missed")
-        click_blank(page)
+        calm_menus(page)
         fr.evaluate("(id) => runsavedscreen(Number(id), 1)", run_id)
         fr.wait_for_selector(NEW_CSV, state="visible", timeout=120000)
     pause(3, 6)
