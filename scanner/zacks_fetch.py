@@ -321,28 +321,31 @@ def login_once(page, user, pw):
     if not logged_in(page):
         return False
     open_screener(page)
-    if "stock-screener" not in page.url:
-        print("signed in, but Zacks did not open the stock screener (landed on", page.url.split("?")[0] + ")")
+    if not screener_ready(page):
+        print("signed in, but the stock screener did not load (on", page.url.split("?")[0] + ")")
         return False
+    print("stock screener is loaded")
     return True
 
 
+def screener_ready(page):
+    """True only when the stock screener itself (its My Screen tab) is on the page - not just its address.
+    (Zacks can load the address and then redirect to /screening/ a moment later.)"""
+    if "stock-screener" not in page.url:
+        return False
+    try:
+        el = page.wait_for_selector("iframe[src*='screener-api.zacks.com']", state="attached", timeout=45000)
+        fr = el.content_frame()
+        fr.wait_for_selector("#my-screen-tab a", timeout=45000)
+        pause(2, 4)                                   # still there a moment later = no redirect
+        return "stock-screener" in page.url
+    except Exception:
+        return False
+
+
 def login(page, user, pw):
-    """Already signed in (saved cookies)? Just navigate to the screener. If Zacks won't open the
-    screener with that old session, clear it and sign in properly (at most MAX_LOGIN_TRIES attempts)."""
-    page.goto("https://www.zacks.com/", wait_until="domcontentloaded", timeout=60000)
-    pause(3, 6)
-    dismiss_popups(page)
-    if logged_in(page):
-        print("already signed in (saved session) - going to the screener")
-        idle_scroll(page)
-        open_screener(page)
-        if "stock-screener" in page.url:
-            return
-        print("Zacks did not open the screener with the saved session - signing in fresh")
-        snap(page, "saved-session-refused")
-        page.context.clear_cookies()
-        pause(2, 4)
+    """A real sign-in every run (at most MAX_LOGIN_TRIES attempts). Every run that reused saved cookies
+    was bounced off the Premium screener; every run that signed in properly reached it."""
     for attempt in range(1, MAX_LOGIN_TRIES + 1):
         print(f"signing in (attempt {attempt} of {MAX_LOGIN_TRIES})")
         try:
@@ -382,6 +385,9 @@ def get_screener(page):
     raise RuntimeError("screener frame not found (see debug screenshots)")
 
 
+NEW_CSV = "#screener_table_wrapper .buttons-csv:not([data-mr-old])"   # the CSV button of the latest results
+
+
 def run_saved_screen(page, name):
     park_mouse(page)                               # make sure no menu drop-down covers the screener tabs
     click_blank(page)
@@ -390,7 +396,14 @@ def run_saved_screen(page, name):
     if not tab:
         raise RuntimeError("'My Screen' tab not found")
     human_click(page, tab)
-    fr.wait_for_selector("#screenlist a[id^='btn_run_']", timeout=30000)
+    try:
+        fr.wait_for_selector("#screenlist a[id^='btn_run_']", timeout=10000)
+    except PWTimeout:
+        print("My Screen click did not open the list - using the screener's own My Screen action")
+        snap(page, "my-screen-click-missed")
+        click_blank(page)
+        fr.evaluate("() => openTab('my-screen')")
+        fr.wait_for_selector("#screenlist a[id^='btn_run_']", timeout=30000)
     pause(2, 4)
     snap(page, "my-screens")
     rows = fr.locator("#screenlist tbody tr")
@@ -404,9 +417,21 @@ def run_saved_screen(page, name):
         idx = 0
     run = rows.nth(idx).locator("a[id^='btn_run_']")       # only ever the Run button
     print(f"running saved screen '{names[idx]}'")
+    run_id = (run.get_attribute("id") or "").replace("btn_run_", "")
+    # mark any results table from the previous screen, so we only accept THIS screen's new results
+    fr.evaluate("() => document.querySelectorAll('.buttons-csv').forEach(b => b.setAttribute('data-mr-old', '1'))")
     human_click(page, run)
     # results are ready when the CSV button of the results table shows
-    fr.wait_for_selector("#screener_table_wrapper .buttons-csv", state="visible", timeout=120000)
+    try:
+        fr.wait_for_selector(NEW_CSV, state="visible", timeout=45000)
+    except PWTimeout:
+        if not run_id.isdigit():
+            raise
+        print(f"Run click did not show results - using the screener's own Run action for screen {run_id}")
+        snap(page, "run-click-missed")
+        click_blank(page)
+        fr.evaluate("(id) => runsavedscreen(Number(id), 1)", run_id)
+        fr.wait_for_selector(NEW_CSV, state="visible", timeout=120000)
     pause(3, 6)
     try:
         print("results:", fr.locator("#runscreen_result").inner_text().split("\n")[0][:120])
@@ -417,7 +442,7 @@ def run_saved_screen(page, name):
 
 
 def download_csv(page, fr, dest):
-    btn = first_visible(fr, ["#screener_table_wrapper a.buttons-csv"], 15000)
+    btn = first_visible(fr, [NEW_CSV], 15000)
     if btn:
         try:
             pause(1.5, 4)          # "look" at the results first
@@ -479,14 +504,12 @@ def main():
                                                                 "--window-size=1440,1000"])
         ua = None if headed else (f"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
                                   f"Chrome/{browser.version} Safari/537.36")     # honest: matches the real machine
-        ctx = browser.new_context(storage_state=str(STATE) if STATE.exists() else None, user_agent=ua, viewport={"width": 1440, "height": 1000},
+        ctx = browser.new_context(user_agent=ua,      # fresh browser: saved cookies get bounced off the screener viewport={"width": 1440, "height": 1000},
                                   locale="en-US", timezone_id="America/New_York", accept_downloads=True)
         ctx.add_init_script("Object.defineProperty(navigator,'webdriver',{get:()=>undefined})")
         page = ctx.new_page()
         try:
             login(page, user, pw)
-            STATE.parent.mkdir(exist_ok=True)
-            ctx.storage_state(path=str(STATE))      # remember the sign-in for next time
             for k, (name, prefix) in enumerate(screens):
                 dest = OUT / f"{prefix}_{day}.csv"       # e.g. zacks_rank_27-11-2026.csv (New York date)
                 try:
