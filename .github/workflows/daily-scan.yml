@@ -67,7 +67,7 @@ jobs:
           git config user.name "scanner-bot"
           git config user.email "scanner-bot@users.noreply.github.com"
           git rm -r -q --cached --ignore-unmatch site
-          git add -A -- . ':!site' ':!**/__pycache__' ':!results/backtest.json'
+          git add -A -- . ':!results/backtest.json'      # site/, debug/, __pycache__ are skipped via .gitignore
           git diff --cached --quiet || git commit -m "Scan $(date -u +%Y-%m-%d)"
           for i in 1 2 3; do
             git pull --rebase -X theirs origin main && git push && break
