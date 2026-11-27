@@ -1,5 +1,7 @@
 """Writes the static website: app page + JSON data files it reads."""
 import json
+
+from . import jsonsafe
 import os
 import shutil
 from pathlib import Path
@@ -40,7 +42,7 @@ def build_site(w, ind):
         shutil.copy(RESULTS / "latest.json", data / "latest.json")
     if (RESULTS / "backtest.json").exists():
         shutil.copy(RESULTS / "backtest.json", data / "backtest.json")
-    (data / "dates.json").write_text(json.dumps(sorted(dates, reverse=True)))
+    (data / "dates.json").write_text(jsonsafe.dumps(sorted(dates, reverse=True)))
 
     # which tickers get a chart
     ch = CONFIG.get("chart", {})
@@ -55,7 +57,7 @@ def build_site(w, ind):
 
     # calendar shared by all bar files
     cal = [d.strftime("%Y-%m-%d") for d in c.index]
-    (data / "calendar.json").write_text(json.dumps(cal))
+    (data / "calendar.json").write_text(jsonsafe.dumps(cal))
 
     O, H, L, C, V = (w[k] for k in ("open", "high", "low", "close", "volume"))
     for t in chart_set:
@@ -70,7 +72,7 @@ def build_site(w, ind):
             return [_num(x, nd) for x in df[t].to_numpy()[i0:]]
         bars = {"t": t, "i0": int(i0), "o": arr(O, px_nd), "h": arr(H, px_nd), "l": arr(L, px_nd),
                 "c": arr(C, px_nd), "v": [None if not np.isfinite(x) else int(x) for x in V[t].to_numpy()[i0:]]}
-        (data / "bars" / f"{t}.json").write_text(json.dumps(bars, separators=(",", ":")))
+        (data / "bars" / f"{t}.json").write_text(jsonsafe.dumps(bars, separators=(",", ":")))
 
     # one summary row per charted ticker (used by search, watchlist, chart header)
     uni = scan_universe(w, ind)
@@ -101,7 +103,7 @@ def build_site(w, ind):
                      _num(avgv.get(t, np.nan) / 1000, 0), t in uni_set,
                      *_profile(t, prof, ptype, pexch, last, EXCHANGES),
                      perf(t, 21), perf(t, 63), _num(adv.get(t, np.nan) / 1e6, 1)])
-    (data / "stocks.json").write_text(json.dumps({
+    (data / "stocks.json").write_text(jsonsafe.dumps({
         "date": cal[-1],
         "fields": ["ticker", "name", "close", "chg", "rs", "state", "days", "vs_ema50", "avg_vol_k", "in_scan",
                    "type", "exchange", "sector", "industry", "mcap_m", "shares_m", "country",
@@ -112,7 +114,7 @@ def build_site(w, ind):
     # Zacks saved-screen CSV, joined with our own trend/RS columns
     from .zacks import load_info, load_latest
     zi = load_info()
-    (data / "zinfo.json").write_text(json.dumps(zi, separators=(",", ":")))
+    (data / "zinfo.json").write_text(jsonsafe.dumps(zi, separators=(",", ":")))
     if zi:
         print(f"zacks: info for {len(zi)} tickers, {sum('target' in v for v in zi.values())} with a target price")
     z = load_latest()
@@ -123,14 +125,14 @@ def build_site(w, ind):
         for r in z["rows"]:
             o = ours.get(r[ti])
             zr.append(r + ([o[5], o[6], o[4], o[3], o[17], o[9]] if o else ["", 0, None, None, None, False]))
-        (data / "zacks.json").write_text(json.dumps({
+        (data / "zacks.json").write_text(jsonsafe.dumps({
             "date": z["date"], "prev_date": z["prev_date"], "new": z["new"], "ticker_col": ti,
             "columns": z["columns"], "ours": ["state", "days", "rs", "chg", "perf_1m", "in_scan"],
             "rows": zr}, separators=(",", ":")))
         print(f"zacks: {len(zr)} stocks in the {z['date']} screen, {len(z['new'])} new")
 
     html = TEMPLATE.read_text().replace("__TITLE__", CONFIG["report"]["site_title"])
-    html = html.replace("__EMA__", json.dumps(CONFIG["ema"]))
+    html = html.replace("__EMA__", jsonsafe.dumps(CONFIG["ema"]))
     html = html.replace("__REPO__", os.environ.get("GITHUB_REPOSITORY", ""))
     (SITE / "index.html").write_text(html)
     (SITE / ".nojekyll").write_text("")
@@ -141,7 +143,9 @@ def _profile(t, prof, ptype, pexch, last, EXCHANGES):
     """type, exchange, sector, industry, market cap ($M), shares outstanding (M), country."""
     ty = {"CS": "Stock", "ADRC": "ADR", "ETF": "ETF", "ETV": "ETF", "ETN": "ETN"}.get(ptype.get(t), "ETF" if t in
          (list(CONFIG["sectors"]) + list(CONFIG.get("industries") or {}) + ["SPY", "QQQ", "IWM", "DIA", "TLT", "GLD"]) else "Stock")
-    ex = EXCHANGES.get(pexch.get(t), pexch.get(t) or "")
+    code = pexch.get(t)
+    code = code if isinstance(code, str) else ""           # blank exchange in the ticker list -> ""
+    ex = EXCHANGES.get(code, code)
     if t in prof.index:
         p = prof.loc[t]
         mc = p.get("market_cap")

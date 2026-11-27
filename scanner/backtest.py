@@ -14,6 +14,8 @@ Every signal is traded (no position limit). The portfolio's daily return is the 
 of all open trades; a dollar view assumes the same amount in every trade.
 """
 import json
+
+from . import jsonsafe
 import math
 from pathlib import Path
 
@@ -287,7 +289,7 @@ def run_backtest(w, ind):
         },
     }
     OUT.parent.mkdir(exist_ok=True)
-    OUT.write_text(json.dumps(out, separators=(",", ":")))
+    OUT.write_text(jsonsafe.dumps(out, separators=(",", ":")))
     m = modes.get("both", {}).get("stats", {})
     print(f"backtest: {len(trades)} trades on {len(cols)} stocks, {ds[first_signal] if first_signal is not None else '-'}"
           f" to {ds[-1]}; portfolio return {m.get('total')}%, max DD {m.get('max_dd')}%")

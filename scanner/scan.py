@@ -1,5 +1,7 @@
 """The daily scan: EMA trend, 20-day breakouts, relative strength, sector rotation."""
 import json
+
+from . import jsonsafe
 from pathlib import Path
 
 import numpy as np
@@ -114,8 +116,8 @@ def run_scan(w, ind):
         },
     }
     RESULTS.mkdir(exist_ok=True)
-    (RESULTS / f"{result['date']}.json").write_text(json.dumps(result))
-    (RESULTS / "latest.json").write_text(json.dumps(result))
+    (RESULTS / f"{result['date']}.json").write_text(jsonsafe.dumps(result))
+    (RESULTS / "latest.json").write_text(jsonsafe.dumps(result))
     return result
 
 
