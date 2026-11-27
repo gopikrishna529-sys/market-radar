@@ -1,6 +1,6 @@
 {
   "tickers_updated": "2026-11-26",
-  "splits_updated": "2026-11-26",
+  "splits_updated": "2026-11-27",
   "splits_from": "2024-11-01",
   "ticker_types": [
     "CS",
@@ -8,5 +8,5 @@
     "ETF",
     "ETV"
   ],
-  "profiles_updated": "2026-11-26"
+  "profiles_updated": "2026-11-27"
 }
