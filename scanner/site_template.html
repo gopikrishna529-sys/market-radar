@@ -672,6 +672,13 @@ function drawScatter(cv,rows){
 }
 
 /* ------------------------------------------------------------------ chart side list (TradingView-style) */
+function openChartList(name,tickers){                   // "▶ Charts" buttons: load a temporary list into the chart page
+  tickers=[...new Set(tickers.filter(Boolean))]; if(!tickers.length) return;
+  try{ localStorage.setItem("mr_tmp",JSON.stringify({name,tickers})); localStorage.setItem("mr_wlsrc","tmp"); }catch(e){}
+  CH.wl=Object.assign(CH.wl||{},{src:"tmp",day:"",q:"",scroll:0,sort:""});
+  location.hash="#chart/"+encodeURIComponent(tickers[0]);
+}
+const tmpList=()=>{ try{ return JSON.parse(localStorage.getItem("mr_tmp")||"null"); }catch(e){ return null; } };
 async function wlItems(src){
   const st=await stocks(), S=t=>st.map[t]||{};
   if(src.startsWith("pf")){ let zp; try{ zp=await (CH.zp ||= J("data/zportfolio.json")); }catch(e){ return []; }
@@ -682,7 +689,8 @@ async function wlItems(src){
       v:p.pnl, vl:p.pnl==null?(p.status==="pending"?"order":"–"):pct(p.pnl,1), tip:`${p.status==="pending"?"Buy next open":p.status==="closed"?"Closed "+fd(p.exit_date):"Bought "+fd(p.entry_date)}`}));
   }
   let list=[];
-  if(src.startsWith("etf:")){ const etf=src.slice(4); let E={}; try{ E=await (CH.etfs ||= J("data/etfs.json")); }catch(e){}
+  if(src==="tmp"){ list=(tmpList()||{}).tickers||[]; }
+  else if(src.startsWith("etf:")){ const etf=src.slice(4); let E={}; try{ E=await (CH.etfs ||= J("data/etfs.json")); }catch(e){}
     const e=E[etf]||{}; let tk=e.tickers;
     if(!tk||!tk.length){ const g=((await J("data/stocks.json")).groups||{})[etf];      // no holdings file: match on sector / industry
       tk=g?Object.values(st.map).filter(r=>r.type!=="ETF"&&(g.sector?(r.sector||"")===g.sector:(g.industry||[]).some(w=>(r.industry||"").toLowerCase().includes(w)))).map(r=>r.ticker).sort():[]; }
@@ -699,7 +707,9 @@ async function renderWLP(cur){
   const W=CH.wl, isPf=W.src.startsWith("pf");
   let days=[]; if(isPf){ try{ const zp=await (CH.zp ||= J("data/zportfolio.json")); days=[...new Set((zp.positions||[]).map(p=>p.entry_date).filter(Boolean))].sort().reverse(); }catch(e){} }
   const wl=WL.load();
+  const tl=tmpList(); if(W.src==="tmp"&&!tl) W.src="pf";
   box.innerHTML=`<div class="hd"><select id="wls">
+      ${tl?`<optgroup label="Opened list"><option value="tmp">${esc(tl.name)} (${tl.tickers.length})</option></optgroup>`:""}
       <optgroup label="Portfolio"><option value="pf">Open positions + buy orders</option><option value="pfo">Open positions</option><option value="pfp">Buy orders (next open)</option><option value="pfc">Closed positions</option></optgroup>
       <optgroup label="Lists"><option value="wl">Watchlist: ${esc(wl.active)}</option><option value="zr1">Zacks Rank #1 (charted)</option><option value="recent">Recently viewed</option></optgroup>
       <optgroup label="Indexes"><option value="etf:SPY">S&amp;P 500 (SPY)</option><option value="etf:QQQ">Nasdaq 100 (QQQ)</option><option value="etf:DIA">Dow Jones 30 (DIA)</option></optgroup>
@@ -715,6 +725,10 @@ async function renderWLP(cur){
     const isE=W.src.startsWith("etf:"), head=isE?items.slice(0,1):[], rest=isE?items.slice(1):items;
     items=head.concat(rest.sort((a,b)=>(val(b)??-1e9)-(val(a)??-1e9))); }
   CH.wlList=items.map(x=>x.t);
+  { const i=CH.wlList.indexOf(cur), n=CH.wlList.length, nv=$("#lnav");          // ‹ 3 / 24 › in the toolbar
+    if(nv){ nv.style.display=n>1?"":"none"; $("#lpos").textContent=i>=0?`${i+1} / ${n}`:`– / ${n}`;
+      const go=d=>{ const j=i<0?0:Math.max(0,Math.min(n-1,i+d)); if(CH.wlList[j]&&CH.wlList[j]!==cur){ CH.wl.scroll=$("#wlb")?$("#wlb").scrollTop:0; location.hash="#chart/"+encodeURIComponent(CH.wlList[j]); } };
+      $("#lprev").onclick=()=>go(-1); $("#lnext").onclick=()=>go(1); } }
   $("#wlb").innerHTML=items.length?items.map(x=>`<div class="it ${x.t===cur?"on":""}" data-go="${esc(x.t)}" title="${esc(x.tip||x.name||"")}"><div><b>${esc(x.t)}</b><span class="nm3">${esc(x.name||"")}</span></div>
       <span class="r">${x.px!=null?fmtPx(x.px):"–"}</span><span class="r ${cls(x.v)}">${x.vl}</span></div>`).join("")
     :`<div class="empty" style="padding:20px">${W.src==="wl"?"Your watchlist is empty — use “+ Watch” next to a ticker.":"Nothing in this list."}</div>`;
@@ -756,6 +770,7 @@ async function viewChart(ticker,focus){
       <span class="sep"></span>
       <div class="seg sm" id="pnl">${TG.map(([k,l,tip])=>`<button data-p="${k}" title="${tip}">${l}</button>`).join("")}</div>
       <span style="flex:1"></span>
+      <span class="seg sm" id="lnav" style="display:none"><button id="lprev" title="Previous in the list (↑)">‹</button><button id="lpos" style="pointer-events:none;color:var(--muted)"></button><button id="lnext" title="Next in the list (↓)">›</button></span>
       <button class="sm" id="chq" title="How to use the chart">?</button>
       <button class="sm" id="fsb" title="Full screen (Esc to leave)">⛶</button>
       <div class="chelp" id="chelp">
@@ -890,15 +905,17 @@ async function viewScanner(){
      <div class="row"><h2>Scanner</h2><select id="sdate">${dates.map(x=>`<option value="${x}" ${x===d.date?"selected":""}>${fd(x)}</option>`).join("")}</select></div>
      <div class="row muted">${b.ticker} <b style="color:var(--text)">${b.close}</b> <span class="${cls(b.chg)}">${pct(b.chg)}</span> · ${d.universe_size} scanned · ${br.pct_in_trend}% in EMA trend · ${br.pct_above_ema200}% above 200 EMA · ${br.new_trend_today} new today</div></div>
    <div class="tabs">${TABS.map(([k,l])=>`<button data-t="${k}" class="${SC.tab===k?"on":""}">${l}<span class="n">${(d[k]||[]).length}</span></button>`).join("")}</div>
-   <div class="row" style="margin-bottom:10px"><input id="sq" placeholder="Search ticker or name" value="${esc(SC.q)}" style="width:220px"><span class="note"><span class="gold">★</span> = RS line at 50-day high · click a ticker for its chart · “+ Watch” adds it to your watchlist</span></div>
+   <div class="row" style="margin-bottom:10px"><input id="sq" placeholder="Search ticker or name" value="${esc(SC.q)}" style="width:220px"><button class="pri" id="sopen" title="Open these stocks on the chart page and step through them with ↓ / ↑">▶ Charts</button><span class="note"><span class="gold">★</span> = RS line at 50-day high · click a ticker for its chart · “+ Watch” adds it to your watchlist</span></div>
    <div class="card" style="padding:4px 8px"><div class="tbl-wrap" id="stbl"></div></div>`;
   $("#sdate").onchange=async e=>{SC.data=await J(`data/scans/${e.target.value}.json`); viewScanner();};
   document.querySelectorAll(".tabs button").forEach(x=>x.onclick=()=>{SC.tab=x.dataset.t;SC.sort=null;viewScanner();});
   $("#sq").oninput=e=>{SC.q=e.target.value;drawScan();}; await stocks(); drawScan();
+  $("#sopen").onclick=()=>openChartList(`Scanner ${fd(d.date)} · ${(TABS.find(t=>t[0]===SC.tab)||[,""])[1]}${SC.q?" · “"+SC.q+"”":""}`,SC.shown||[]);
 }
 function drawScan(){
-  const d=SC.data; if(SC.tab==="rs_days"&&d.benchmark.chg>=0){ $("#stbl").innerHTML=`<div class="empty">${d.benchmark.ticker} was not down on ${fd(d.date)}.</div>`; return; }
+  const d=SC.data; if(SC.tab==="rs_days"&&d.benchmark.chg>=0){ SC.shown=[]; $("#sopen")&&($("#sopen").textContent="▶ 0 charts"); $("#stbl").innerHTML=`<div class="empty">${d.benchmark.ticker} was not down on ${fd(d.date)}.</div>`; return; }
   const q=SC.q.toUpperCase(); let rows=(d[SC.tab]||[]).filter(r=>!q||r.ticker.includes(q)||(r.name||"").toUpperCase().includes(q)); if(SC.sort) rows=sortRows(rows,SC.sort,SC.dir);
+  SC.shown=rows.map(r=>r.ticker); $("#sopen")&&($("#sopen").textContent=`▶ ${rows.length} chart${rows.length===1?"":"s"}`);
   const cols=[["ticker","Ticker"],["name","Name"],["close","Close"],["chg","Chg %"],["rs","RS"],["vol_ratio","Vol ×"],["days_trend","Days in trend"],["ext_ema20","% from EMA20"],["perf_1m","1M %"]];
   $("#stbl").innerHTML=rows.length?`<table><thead><tr>${cols.map(([k,l])=>`<th data-k="${k}">${l}${SC.sort===k?(SC.dir>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>
     <td><span class="tk" data-tk="${esc(r.ticker)}">${esc(r.ticker)}</span>${r.rs_high?' <span class="gold" title="RS line at 50-day high">★</span>':""} ${starHTML(r.ticker)}</td>
@@ -1138,7 +1155,7 @@ async function viewZacks(){
       <input id="zq" placeholder="Search every column (ticker, company, industry…)" style="width:340px">
       <label class="muted"><input type="checkbox" id="znew"> new in screen only</label>
       <label class="muted"><input type="checkbox" id="zliq"> liquid only (scanner filter)</label>
-      <button id="zclr">✕ Clear all filters</button></div>
+      <button id="zclr">✕ Clear all filters</button><button class="pri" id="zopen" title="Open the filtered stocks on the chart page and step through them">▶ Charts</button></div>
       <div class="note" style="margin-top:8px">Filter boxes under each column: numbers take <b>5</b>, <b>&gt;2</b>, <b>&lt;=1.5</b>, <b>2-4</b> (range), <b>!3</b> (not); text takes a word it contains, <b>=A</b> (exact), <b>A,B</b> (any of), <b>!F</b> (not). Columns with few values have a drop-down.</div></div>
     <div class="card"><h3>Stocks <span class="n" id="zcount"></span> <small>click a column title to sort · click a ticker for its chart · <span class="gold">NEW</span> = not in the previous day's screen</small></h3><div class="tbl-wrap scroll" id="ztbl" style="max-height:680px"></div></div>`;
   $("#znew").checked=ZK.nw; $("#zliq").checked=ZK.liq; $("#zq").value=ZK.q;
@@ -1155,7 +1172,8 @@ async function viewZacks(){
   const body=(more)=>{ let rows=filt();
     if(ZK.st.k!=null){ const c=COLS.find(c=>String(c.k)===String(ZK.st.k)); if(c){ const g=c.sortGet||c.get, d=ZK.st.d;
       rows=[...rows].sort((a,b)=>{ const x=g(a), y=g(b); if(x==null||x==="") return 1; if(y==null||y==="") return -1; return (typeof x==="number"&&typeof y==="number"?x-y:String(x).localeCompare(String(y)))*d; }); } }
-    $("#zcount").textContent=`${rows.length} of ${z.rows.length}`; const total=rows.length; rows=rows.slice(0,ZK.lim);
+    $("#zcount").textContent=`${rows.length} of ${z.rows.length}`; const total=rows.length; ZK.shown=rows.map(r=>r[ti]).filter(t=>STOCKS.map[t]);
+    $("#zopen").textContent=`▶ ${ZK.shown.length} charts`; rows=rows.slice(0,ZK.lim);
     $("#zbody").innerHTML=rows.map(r=>`<tr>
       <td><span class="tk" data-tk="${esc(r[ti])}">${esc(r[ti])}</span> ${starHTML(r[ti])}</td>
       ${z.columns.map((_,i)=>i).filter(i=>i!==ti).map(i=>`<td class="${typeof r[i]==="number"?"":"nm"}">${esc(r[i]??"")}</td>`).join("")}
@@ -1166,6 +1184,7 @@ async function viewZacks(){
     $("#zmore")&&($("#zmore").onclick=()=>{ ZK.lim=1e9; body(); }); };
   document.querySelectorAll("#ztbl [data-cf]").forEach(el=>{ const go=()=>{ ZK.cf[el.dataset.cf]=el.value; body(); }; el.oninput=go; el.onchange=go; });
   $("#znew").onchange=e=>{ZK.nw=e.target.checked;body();}; $("#zliq").onchange=e=>{ZK.liq=e.target.checked;body();}; $("#zq").oninput=e=>{ZK.q=e.target.value;body();};
+  $("#zopen").onclick=()=>{ if(ZK.shown.length>500&&!confirm(`Open ${ZK.shown.length} charts? Filters can narrow the list.`)) return; openChartList(`Zacks screen ${fd(z.date)}${Object.values(ZK.cf).some(Boolean)||ZK.q?" (filtered)":""}`,ZK.shown); };
   $("#zclr").onclick=()=>{ ZK.cf={}; ZK.q=""; ZK.nw=false; ZK.liq=false; viewZacks(); };
   $("#zexp").onclick=()=>saveCSV(`zacks-${z.date}.csv`,[COLS.map(c=>c.l),...filt().map(r=>COLS.map(c=>c.get(r)??""))]);
   head(); body();
@@ -1200,7 +1219,7 @@ async function viewZPortfolio(){
       <div class="seg" id="zpshow">${[["current",`Open + orders (${open.length+pend.length})`],["open",`Open (${open.length})`],["pending",`Buy orders (${pend.length})`],["closed",`Closed (${closed.length})`],["all",`All (${P.length})`]].map(([k,l])=>`<button data-s="${k}" class="${ZP.show===k?"on":""}">${l}</button>`).join("")}</div>
       <label class="muted">Entry date <select id="zpday"><option value="">All dates</option>${days.map(d=>`<option value="${d}" ${ZP.day===d?"selected":""}>${fd(d)} (${cnt(d)})</option>`).join("")}</select></label>
       <input id="zpq" placeholder="Filter ticker or company" style="width:200px" value="${esc(ZP.q)}">
-      <span class="muted" id="zpsum"></span></div></div>
+      <button class="pri" id="zpopen" title="Open these positions on the chart page and step through them">▶ Charts</button><span class="muted" id="zpsum"></span></div></div>
     <div class="card"><div class="tbl-wrap scroll" id="zptbl" style="max-height:720px"></div></div>
     <div class="card"><p class="note" style="margin:0">${rulesTxt}</p></div>`;
   const nm=t=>((STOCKS.map[t]||{}).name)||"";
@@ -1216,6 +1235,8 @@ async function viewZPortfolio(){
   const filt=()=>P.filter(p=>(ZP.show==="all"||(ZP.show==="current"?(isOpen(p)||p.status==="pending"):ZP.show==="open"?isOpen(p):p.status===ZP.show))
       &&(!ZP.day||p.entry_date===ZP.day)&&matchQ(ZP.q,p.ticker,nm(p.ticker)));
   const draw=()=>{ const rows=filt().map(p=>({...p,now:p.status==="closed"?p.exit:p.last})), srt=sortRows(rows,ZP.st.k,ZP.st.d);
+    ZP.shown=srt.map(p=>p.ticker); $("#zpopen").textContent=`▶ ${new Set(ZP.shown).size} charts`;
+    $("#zpopen").onclick=()=>openChartList(`Portfolio · ${$("#zpshow button.on")?.textContent.replace(/\s*\(\d+\)/,"")||"positions"}${ZP.day?" · entry "+fd(ZP.day):""}`,ZP.shown);
     const wp=rows.filter(p=>p.pnl!=null), av=wp.length?wp.reduce((a,p)=>a+p.pnl,0)/wp.length:null;
     $("#zpsum").innerHTML=`${rows.length} position${rows.length===1?"":"s"}${wp.length?` · average <b class="${cls(av)}">${pct(av)}</b> · <b class="${cls(av)}">${money(wp.reduce((a,p)=>a+p.pnl/100*D,0))}</b>`:""}`;
     $("#zptbl").innerHTML=rows.length?`<table><thead><tr>${cols.map(([k,l])=>`<th data-k="${k}">${l}${ZP.st.k===k?(ZP.st.d>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>${srt.map(p=>`<tr>${cols.map(([,,f])=>`<td>${f(p)}</td>`).join("")}</tr>`).join("")}</tbody></table>`
