@@ -50,6 +50,13 @@ def human_click(page, loc, wander=True):
     loc.scroll_into_view_if_needed(timeout=10000)
     pause(0.3, 0.9)
     box = loc.bounding_box()
+    vh = (page.viewport_size or {"height": 1000})["height"]
+    if box and not (180 < box["y"] + box["height"] / 2 < vh - 120):
+        # keep clear of Zacks' pinned green top bar: bring the target to the middle of the window
+        dy = (box["y"] + box["height"] / 2) - vh * random.uniform(.42, .55)
+        page.evaluate("(dy) => window.scrollBy({top: dy, behavior: 'smooth'})", dy)
+        pause(0.8, 1.4)
+        box = loc.bounding_box()
     if not box:
         loc.click()
         return
@@ -79,6 +86,13 @@ def human_click(page, loc, wander=True):
     pause()
 
 
+def page_top_is(page, frame_el, x, y):
+    try:
+        return frame_el.evaluate("(fe, p) => fe.ownerDocument.elementFromPoint(p[0], p[1]) === fe", [x, y])
+    except Exception:
+        return True
+
+
 def _on_target(loc, x, y):
     """Is the element under the mouse point the one we mean to click (or inside it)?
     For the screener (an iframe from another Zacks address) the frame's offset is measured from outside."""
@@ -90,6 +104,11 @@ def _on_target(loc, x, y):
             fb = fr.frame_element().bounding_box()
             if fb:
                 fx, fy = fb["x"], fb["y"]
+        if fr and fr.parent_frame:
+            # the click lands on whatever is on top in the MAIN page; it must be the screener frame itself
+            fe = fr.frame_element()
+            if not page_top_is(loc.page, fe, x, y):
+                return False
         return h.evaluate("""(el, p) => {
             const top = el.ownerDocument.elementFromPoint(p[0], p[1]);
             return !!top && (top === el || el.contains(top));
@@ -127,7 +146,10 @@ BLANK_JS = """([x, y]) => {
 
 
 MENU_CSS = ("#primary ul.menu, #primary .mega-menu, #navbar-collapse li.with-dd > ul, #navbar-collapse .mega-menu "
-            "{display:none !important; visibility:hidden !important; pointer-events:none !important;}")
+            "{display:none !important; visibility:hidden !important; pointer-events:none !important;} "
+            # Zacks' green top bar is pinned (sticky) and can lie on top of the screener: let it scroll away
+            "#sticky_head, #sticky_head .primary-nav--wrapper, #sticky_head header, nav#primary, nav#primary.sticky "
+            "{position:static !important; top:auto !important;}")
 
 
 def calm_menus(page):
