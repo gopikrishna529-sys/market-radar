@@ -131,6 +131,25 @@ def broker_history(prefixes=None):
     return _history(prefixes or _screens()[1], ("broker rec",), (), lambda v: round(float(v), 2) if 1 <= v <= 5 else None)
 
 
+def _as_date(v):
+    """Zacks dates come as 20261204, 12/4/2026 or 2026-12-04 -> '2026-12-04' (None if unreadable)."""
+    import re
+    s = str(int(v)) if isinstance(v, (int, float)) and v == v else str(v).strip()
+    m = re.fullmatch(r"(\d{4})(\d{2})(\d{2})", s) or re.fullmatch(r"(\d{4})-(\d{1,2})-(\d{1,2})", s)
+    if m:
+        y, mo, d = m.groups()
+    else:
+        m = re.fullmatch(r"(\d{1,2})/(\d{1,2})/(\d{2,4})", s)
+        if not m:
+            return None
+        mo, d, y = m.groups()
+        y = ("20" + y) if len(y) == 2 else y
+    try:
+        return f"{int(y):04d}-{int(mo):02d}-{int(d):02d}"
+    except ValueError:
+        return None
+
+
 def load_info():
     """Per-ticker Zacks facts merged from the newest file of every configured screen:
     {ticker: {rank, value, growth, momentum, vgm, broker, upside, target, zclose, date}}"""
@@ -147,7 +166,9 @@ def load_info():
               "momentum": _find(cols, "momentum score"), "vgm": _find(cols, "vgm score"),
               "broker": _find(cols, "broker rec"), "upside": _find(cols, "upside", "target"),
               "zclose": _find(cols, "last close"),
-              "target_exact": _find(cols, "target price", avoid=("upside", "%"))}
+              "target_exact": _find(cols, "target price", avoid=("upside", "%")),
+              "next_report": _find(cols, "next", "report"),           # e.g. "Next EPS Report Date" (add it to the screen)
+              "last_surprise": _find(cols, "surprise", avoid=("next",))}
         price_cols = [(i, c) for i, c in enumerate(cols) if i not in (ti, ix["target_exact"])
                       and any(w in c.lower() for w in words) and "%" not in c and "upside" not in c.lower()]
         for r in z["rows"]:
@@ -170,6 +191,11 @@ def load_info():
             d["rank_txt"] = RANK_TXT.get(d["rank"], "")
         if isinstance(d.get("broker"), (int, float)):
             d["broker_txt"] = broker_txt(d["broker"])
+        nr = d.get("next_report")
+        if nr not in (None, ""):
+            d["next_report"] = _as_date(nr)
+            if not d["next_report"]:
+                d.pop("next_report")
         ex = d.pop("target_exact", None)
         up, zcl = d.get("upside"), d.get("zclose")
         if isinstance(ex, (int, float)) and ex > 0:          # Zacks' own Average Target Price

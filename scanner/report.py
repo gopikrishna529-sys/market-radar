@@ -75,7 +75,7 @@ def _sector_table(rows):
     return "".join(out)
 
 
-def build_email(result, bt=None, zp=None):
+def build_email(result, bt=None, zp=None, brief=None):
     """Daily email: the Zacks portfolio only (orders for the next open, open positions, closed trades)."""
     site = os.environ.get("SITE_URL", "")
     day = fmt_date(result["date"])
@@ -83,6 +83,7 @@ def build_email(result, bt=None, zp=None):
     th = 'style="text-align:left;padding:6px 8px;border-bottom:2px solid #ddd;font-size:12px;color:#555"'
     td = 'style="padding:5px 8px;border-bottom:1px solid #eee;font-size:13px"'
     zp = zp or {}
+    brief = brief or {}
     P = zp.get("positions", [])
     last = zp.get("last_day")
     r = zp.get("rules", {})
@@ -132,7 +133,7 @@ def build_email(result, bt=None, zp=None):
         return f'{escape(r["name"])} <span style="color:#888">#{r["rank"]}</span>{tag}'
 
     def fd(x):
-        return fmt_date(x) if x else "–"
+        return f'<span style="white-space:nowrap">{fmt_date(x)}</span>' if x else "–"
 
     def px(x):
         return "–" if x is None else f"{x:,.2f}"
@@ -145,8 +146,9 @@ def build_email(result, bt=None, zp=None):
         f'closed P&amp;L {usd(rpl)} from {len(closed)} trades ({wins} winners) · total {usd(upl + rpl)} '
         f'on ${D:,.0f} per position · tracking since {fd(zp.get("start"))}</p>',
         f'<p style="margin:0 0 8px"><a href="{site}#portfolio">Open the portfolio on the website →</a></p>' if site else "",
-        _portfolio_section(zp, opn, closed, h2, th, td),
-        _market_section(result, P, buys, opn, h2, th, td),
+        _tldr(result, zp, brief, opn, buys, sells, sold_today),
+        _portfolio_section(zp, opn, closed, h2, th, td, brief),
+        _fills_section(brief, h2, th, td),
         f'<h2 {h2}>🟢 Buy at the next open ({len(buys)})</h2>'
         + '<p style="margin:0 0 6px;font-size:12px;color:#555">Sorted by sector strength: '
           '<span style="background:#e3f6e8;padding:1px 6px">green = top-2 sector</span> first, '
@@ -157,6 +159,10 @@ def build_email(result, bt=None, zp=None):
         f'<h2 {h2}>🔴 Sell at the next open ({len(sells)})</h2>',
         table(["Ticker", "Bought", "Entry", "Last", "P&amp;L", "Why"],
               [[tk(p), fd(p.get("entry_date")), px(p.get("entry")), px(p.get("last")), pc(p.get("pnl")), escape(p.get("reason", ""))] for p in sells]),
+        _market_section(result, P, buys, opn, h2, th, td, brief),
+        _zchanges_section(brief, h2),
+        _near_section(brief, h2, th, td, sec),
+        _leaders_section(brief, result, h2, th, td),
     ]
     if sold_today:
         parts += [f'<h2 {h2}>✅ Sold at today\u2019s open ({len(sold_today)})</h2>',
@@ -188,7 +194,141 @@ def build_email(result, bt=None, zp=None):
     return subject, "".join(parts)
 
 
-def _portfolio_section(zp, opn, closed, h2, th, td):
+def _pcs(x, d=1):
+    return "–" if x is None else f'<span style="color:{_color(x)}">{x:+.{d}f}%</span>'
+
+
+def _tbl(th, td, head, rows):
+    return (f'<table cellspacing="0" style="border-collapse:collapse;width:100%;margin-bottom:8px"><tr>'
+            + "".join(f"<th {th}>{h}</th>" for h in head) + "</tr>"
+            + "".join("<tr>" + "".join(f"<td {td}>{c}</td>" for c in row) + "</tr>" for row in rows) + "</table>")
+
+
+def _tldr(result, zp, brief, opn, buys, sells, sold_today):
+    """'Yesterday in 30 seconds' box at the very top."""
+    daily = zp.get("daily") or []
+    D = (zp.get("rules") or {}).get("dollars_per_trade", 10000)
+    lines = []
+    if len(daily) >= 2 and any(x[2] for x in daily[-2:]):
+        d = daily[-1][1] - daily[-2][1]
+        lines.append(f'Portfolio <b style="color:{_color(d)}">{"+" if d >= 0 else "-"}${abs(d):,.0f}</b> on the day · '
+                     f'total <b style="color:{_color(daily[-1][1])}">{"+" if daily[-1][1] >= 0 else "-"}${abs(daily[-1][1]):,.0f}</b> · {len(opn)} open positions.')
+    elif opn:
+        lines.append(f"{len(opn)} open positions (first day — no daily change yet).")
+    else:
+        lines.append("No positions yet — the first buy orders fill at the next open.")
+    snap = {x["t"]: x for x in brief.get("snapshot", [])}
+    mk = " · ".join(f'{n} {_pcs(snap[t]["chg"], 2)}' for t, n in (("SPY", "S&amp;P 500"), ("QQQ", "Nasdaq"), ("IWM", "Small caps")) if t in snap)
+    if mk:
+        b = brief.get("breadth") or {}
+        trend = ""
+        if b.get("now") is not None and b.get("w1") is not None:
+            dd = b["now"] - b["w1"]
+            trend = f' · breadth {"improving" if dd > 2 else "weakening" if dd < -2 else "flat"} ({b["now"]:.0f}% above EMA200, {dd:+.0f} pts in a week)'
+        lines.append(f"Market: {mk}{trend}.")
+    bought = [f for f in brief.get("fills", []) if f["side"] == "buy"]
+    act = []
+    if bought:
+        act.append(f"bought {len(bought)} at the open")
+    if sold_today:
+        act.append(f"sold {len(sold_today)} ({', '.join(escape(p['ticker']) for p in sold_today[:5])})")
+    act.append(f"{len(buys)} buy order{'s' if len(buys) != 1 else ''} and {len(sells)} sell order{'s' if len(sells) != 1 else ''} for the next open")
+    lines.append("Today: " + ", ".join(act) + ".")
+    watch = []
+    near = [p for p in opn if p["status"] == "open" and p.get("vs_ema") is not None and 0 <= p["vs_ema"] <= 2]
+    if near:
+        watch.append(f"{len(near)} near the EMA50 sell line ({', '.join(escape(p['ticker']) for p in near[:4])})")
+    hit = [p for p in opn if p.get("to_target") is not None and p["to_target"] <= 0]
+    if hit:
+        watch.append(f"{len(hit)} at their price target ({', '.join(escape(p['ticker']) for p in hit[:4])})")
+    soon = [e for e in brief.get("earnings", []) if e["date"] <= _days_ahead(result["date"], 7)]
+    if soon:
+        watch.append(f"earnings within a week: {', '.join(escape(e['t']) for e in soon[:5])}")
+    dn = [x for x in (brief.get("zchanges") or {}).get("items", []) if x["held"] and x["kind"] == "rank" and (x["new"] or 9) > (x["old"] or 0)]
+    if dn:
+        watch.append(f"Zacks downgrades overnight: {', '.join(escape(x['t']) for x in dn[:4])}")
+    lines.append("<b>Needs attention:</b> " + ("; ".join(watch) + "." if watch else "nothing urgent."))
+    return ('<div style="background:#f3f7fd;border:1px solid #d6e4f7;border-radius:8px;padding:10px 14px;margin:8px 0 6px">'
+            '<div style="font-weight:700;margin-bottom:4px">⏱ Yesterday in 30 seconds</div>'
+            + "".join(f'<div style="margin:2px 0">• {x}</div>' for x in lines) + "</div>")
+
+
+def _days_ahead(day, n):
+    from datetime import date, timedelta
+    return (date.fromisoformat(day) + timedelta(days=n)).isoformat()
+
+
+def _fills_section(brief, h2, th, td):
+    F = brief.get("fills") or []
+    if not F:
+        return ""
+    rows = []
+    for f in F:
+        if f["side"] == "buy":
+            rows.append([f'<b>{escape(f["t"])}</b>', '<span style="color:#0a7d38">BUY</span>', f'{f["price"]:,.2f}' if f["price"] else "–",
+                         f'{f["ref"]:,.2f}' if f["ref"] else "–", _pcs(f["gap"]), _pcs(f.get("day")), ""])
+        else:
+            rows.append([f'<b>{escape(f["t"])}</b>', '<span style="color:#c62828">SELL</span>', f'{f["price"]:,.2f}' if f["price"] else "–",
+                         f'{f["ref"]:,.2f}' if f["ref"] else "–", _pcs(f["gap"]), "", f'{_pcs(f.get("pnl"))} · {escape(f.get("reason") or "")}'])
+    gaps = [f["gap"] for f in F if f["side"] == "buy" and f["gap"] is not None]
+    note = (f'Average gap on buys: {_pcs(sum(gaps) / len(gaps), 2)} versus the signal close '
+            f'({"you paid more than the signal price" if sum(gaps) > 0 else "you paid less than the signal price"}).') if gaps else ""
+    return (f'<h2 {h2}>🧾 What happened at the open</h2>'
+            + _tbl(th, td, ["Ticker", "Side", "Fill (open)", "Previous close", "Gap", "Open → close", "Result"], rows)
+            + (f'<p style="margin:0 0 10px;font-size:12px;color:#555">{note}</p>' if note else ""))
+
+
+def _zchanges_section(brief, h2):
+    z = brief.get("zchanges") or {}
+    it = z.get("items") or []
+    if not it:
+        return ""
+    held_r = [x for x in it if x["held"] and x["kind"] == "rank"]
+    held_b = [x for x in it if x["held"] and x["kind"] == "broker"]
+    rank = lambda x: f'<b>{escape(x["t"])}</b> #{x["old"]}→#{x["new"]}' if x["new"] else f'<b>{escape(x["t"])}</b> left the screen'
+    lines = []
+    if held_r:
+        lines.append("<b>Your positions:</b> " + ", ".join(
+            f'<span style="color:{"#0a7d38" if (x["new"] or 9) < (x["old"] or 9) else "#c62828"}">{rank(x)}</span>' for x in held_r))
+    if held_b:
+        lines.append("<b>Broker rating changes on your positions:</b> " + ", ".join(
+            f'<span style="color:{"#0a7d38" if x["new"] < x["old"] else "#c62828"}"><b>{escape(x["t"])}</b> {x["old"]:.2f}→{x["new"]:.2f}</span>' for x in held_b))
+    n1 = z.get("new_rank1") or []
+    if n1:
+        lines.append(f"<b>New Zacks Rank #1 (Strong Buy)</b>, liquid stocks, strongest RS first: "
+                     + ", ".join(f"<b>{escape(t)}</b>" for t in n1[:15]) + (f" and {len(n1) - 15} more" if len(n1) > 15 else "") + ".")
+    up = sum(1 for x in it if x["kind"] == "rank" and x["new"] and x["old"] and x["new"] < x["old"])
+    dn = sum(1 for x in it if x["kind"] == "rank" and x["new"] and x["old"] and x["new"] > x["old"])
+    lines.append(f"Across your Zacks screens: {up} rank upgrades and {dn} downgrades overnight"
+                 + (" — more downgrades than upgrades, analysts are turning cautious." if dn > up * 1.3 else
+                    " — more upgrades than downgrades, estimates are rising." if up > dn * 1.3 else "."))
+    return (f'<h2 {h2}>🔔 Overnight Zacks changes <span style="font-weight:400;font-size:12px;color:#777">({fmt_date(z.get("date"))} file)</span></h2>'
+            '<ul style="margin:4px 0 10px;padding-left:20px;line-height:1.55">' + "".join(f"<li>{x}</li>" for x in lines) + "</ul>")
+
+
+def _near_section(brief, h2, th, td, sec):
+    N = brief.get("near") or []
+    if not N:
+        return ""
+    rows = [[f'<b>{escape(x["t"])}</b>', escape(x["why"]), x["rank"], f'{x["broker"]:.2f}', _pcs(x["upside"]), x["rs"], _pcs(x["m1"])] for x in N]
+    return (f'<h2 {h2}>👀 Next in line <span style="font-weight:400;font-size:12px;color:#777">(pass every buy rule but one — '
+            f'{brief.get("near_total", len(N))} stocks, strongest {len(N)} shown)</span></h2>'
+            + _tbl(th, td, ["Ticker", "Still missing", "Zacks", "Brokers", "To target", "RS", "1 month"], rows))
+
+
+def _leaders_section(brief, result, h2, th, td):
+    L = brief.get("leaders") or []
+    if not L:
+        return ""
+    names = {r["ticker"]: r["name"] for r in result.get("sectors") or []}
+    rows = [[f'<b>{escape(x["t"])}</b>', escape(names.get(x["sector"], x["sector"])), x["rs"], _pcs(x["m1"]),
+             x["rank"] if x["rank"] else "–", f'{x["broker"]:.2f}' if x["broker"] else "–"] for x in L]
+    return (f'<h2 {h2}>⭐ Leaders in the leading sectors <span style="font-weight:400;font-size:12px;color:#777">(in an EMA uptrend, not owned — '
+            'the Zacks columns show why they are not a buy yet)</span></h2>'
+            + _tbl(th, td, ["Ticker", "Sector", "RS", "1 month", "Zacks Rank", "Brokers"], rows))
+
+
+def _portfolio_section(zp, opn, closed, h2, th, td, brief=None):
     """How the portfolio is doing: totals, vs SPY, daily P&L history and a check of every open position."""
     r = zp.get("rules", {})
     D = r.get("dollars_per_trade", 10000)
@@ -276,6 +416,16 @@ def _portfolio_section(zp, opn, closed, h2, th, td):
                    + f" (sold automatically at Rank {r.get('sell_rank', 4)}+).")
     if upg:
         ins.append("<b>Zacks upgrades since buying:</b> " + ", ".join(f'<b>{escape(p["ticker"])}</b> #{p["rank"]}→#{p["rank_now"]}' for p in upg) + ".")
+    rk_ = (brief or {}).get("risk")
+    if rk_ and rk_["max_dd"] < 0:
+        ins.append(f"<b>Risk:</b> largest drop from a peak so far {usd(rk_['max_dd'])}; now {usd(rk_['cur_dd'])} below the best day.")
+    E = (brief or {}).get("earnings") or []
+    if E:
+        ins.append("<b>Earnings coming up:</b> " + ", ".join(f'<b>{escape(e["t"])}</b> {fmt_date(e["date"])}' for e in E[:10])
+                   + " — results can move a stock 10–20% overnight.")
+    elif brief is not None and not brief.get("earnings_available"):
+        ins.append('<span style="color:#888">Earnings dates: add the “Next EPS Report Date” column to your Zacks '
+                   'market-radar screen and they will appear here.</span>')
     if closed:
         ins.append(f"<b>Closed trades:</b> average winner {pc(avg(wins))}, average loser {pc(avg(loss))}, held "
                    f"{sum(p.get('days') or 0 for p in closed) / len(closed):.0f} days on average.")
@@ -283,7 +433,7 @@ def _portfolio_section(zp, opn, closed, h2, th, td):
             + '<ul style="margin:4px 0 10px;padding-left:20px;line-height:1.55">' + "".join(f"<li>{x}</li>" for x in ins) + "</ul>")
 
 
-def _market_section(result, P, buys, opn, h2, th, td):
+def _market_section(result, P, buys, opn, h2, th, td, brief=None):
     """Market tone + sector leaderboard + plain-English insights for the portfolio."""
     S = result.get("sectors") or []
     if not S:
@@ -352,9 +502,29 @@ def _market_section(result, P, buys, opn, h2, th, td):
         rows.append(f'<tr style="background:{bg}"><td {td}><b>#{k}</b> {chs}</td><td {td}>{escape(r["name"])} <span style="color:#888">{r["ticker"]}</span></td>'
                     f'<td {td}>{pc(r["rel_1w"])}</td><td {td}><b>{pc(r["rel_1m"])}</b></td><td {td}>{pc(r["rel_3m"])}</td>'
                     f'<td {td}>{escape(r["quadrant"])}</td><td {td}>{held or ""}</td></tr>')
-    return (f'<h2 {h2}>🧭 Market &amp; sectors</h2>'
-            f'<p style="margin:0 0 6px">SPY {pc(b.get("chg"), 2)} today · {pc(b.get("perf_1w"))} 1 week · {pc(b.get("perf_1m"))} 1 month · '
-            f'{p200:.0f}% of stocks above EMA200 · {pit:.0f}% in a full EMA uptrend → market is {tone}.</p>'
+    snap = (brief or {}).get("snapshot") or []
+    st = ""
+    if snap:
+        st = _tbl(th, td, ["", "Day", "1 week", "1 month", "Trend"],
+                  [[f'<b>{escape(x["name"])}</b> <span style="color:#888">{x["t"]}</span>', f'<b>{_pcs(x["chg"], 2)}</b>', _pcs(x["w1"]), _pcs(x["m1"]),
+                    ('<span style="color:#0a7d38">▲ uptrend</span>' if x["trend"] == "up" else '<span style="color:#c62828">▼ downtrend</span>'
+                     if x["trend"] == "down" else ("above EMA50" if x["above50"] else "below EMA50"))] for x in snap])
+        risk_off = [x["t"] for x in snap if x["t"] in ("TLT", "GLD", "UUP") and (x["chg"] or 0) > 0.5]
+        if (next((x["chg"] for x in snap if x["t"] == "SPY"), 0) or 0) < -0.5 and len(risk_off) >= 2:
+            st += '<p style="margin:0 0 8px;font-size:12px">⚠️ Stocks down while bonds / gold / dollar are up — a <b>risk-off</b> day.</p>'
+    bb = (brief or {}).get("breadth") or {}
+    bl = ""
+    if bb.get("now") is not None:
+        def dlt(a):
+            return "–" if a is None else f'{a:.0f}%'
+        bl = (f'<p style="margin:0 0 6px"><b>Breadth</b> (stocks above EMA200): {dlt(bb.get("now"))} today · {dlt(bb.get("w1"))} a week ago · '
+              f'{dlt(bb.get("m1"))} a month ago · {dlt(bb.get("m3"))} 3 months ago. Full EMA uptrend: {dlt(bb.get("trend_now"))} '
+              f'(was {dlt(bb.get("trend_w1"))} a week ago). New 52-week highs <b style="color:#0a7d38">{bb.get("new_highs")}</b> vs '
+              f'lows <b style="color:#c62828">{bb.get("new_lows")}</b>'
+              + (" — more stocks breaking down than out." if bb.get("new_lows", 0) > bb.get("new_highs", 0) * 1.5 else
+                 " — more breakouts than breakdowns." if bb.get("new_highs", 0) > bb.get("new_lows", 0) * 1.5 else ".") + "</p>")
+    return (f'<h2 {h2}>🧭 Market &amp; sectors</h2>' + st + bl +
+            f'<p style="margin:0 0 6px"><b>Market tone:</b> {tone}.</p>'
             '<ul style="margin:6px 0 10px;padding-left:20px;line-height:1.55">' + "".join(f"<li>{x}</li>" for x in ins) + "</ul>"
             f'<table cellspacing="0" style="border-collapse:collapse;width:100%;margin-bottom:6px"><tr>'
             + "".join(f"<th {th}>{h}</th>" for h in ("Rank", "Sector", "1W vs SPY", "1M vs SPY", "3M vs SPY", "Rotation", "Ours (open + orders)"))
@@ -444,9 +614,9 @@ def _strategy_section(bt, h2, site):
             + (f' · <a href="{site}#backtest">details</a>' if site else "") + "</p>")
 
 
-def send_email(result, bt=None, zp=None):
+def send_email(result, bt=None, zp=None, brief=None):
     user, pwd, to = (os.environ.get(k) for k in ("SMTP_USER", "SMTP_PASSWORD", "EMAIL_TO"))
-    subject, html = build_email(result, bt, zp)
+    subject, html = build_email(result, bt, zp, brief)
     (ROOT / "results" / "last_email.html").write_text(html)
     if not (user and pwd and to):
         print("email not sent: SMTP_USER / SMTP_PASSWORD / EMAIL_TO not set (saved results/last_email.html)")

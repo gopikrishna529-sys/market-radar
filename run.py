@@ -52,7 +52,13 @@ def main():
     zp = zportfolio.update(w, ind)
     build_site(w, ind)
     if "--no-email" not in sys.argv:
-        send_email(result, bt, zp)
+        try:
+            from scanner.brief import build as build_brief
+            brief = build_brief(w, ind, result, zp)
+        except Exception as e:                      # the email still goes out without the extras
+            print(f"morning brief: skipped ({e})")
+            brief = None
+        send_email(result, bt, zp, brief)
 
 
 if __name__ == "__main__":
