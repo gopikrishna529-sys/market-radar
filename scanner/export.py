@@ -115,6 +115,9 @@ def build_site(w, ind):
     from .zacks import load_info, load_latest
     zi = load_info()
     (data / "zinfo.json").write_text(jsonsafe.dumps(zi, separators=(",", ":")))
+    zp = ROOT / "data" / "zportfolio.json"                  # Zacks portfolio (tracked forward, see zportfolio.py)
+    if zp.exists():
+        (data / "zportfolio.json").write_text(zp.read_text())
     if zi:
         print(f"zacks: info for {len(zi)} tickers, {sum('target' in v for v in zi.values())} with a target price")
     z = load_latest()

@@ -20,7 +20,7 @@ button.pri{background:var(--accent);border-color:var(--accent);color:#fff;font-w
 header{display:flex;align-items:center;gap:22px;padding:0 22px;height:56px;border-bottom:1px solid var(--line);background:#0d1218;position:sticky;top:0;z-index:20}
 .brand{font-weight:700;font-size:17px;letter-spacing:.2px;white-space:nowrap}.brand span{color:var(--accent)}
 nav{display:flex;gap:2px;height:100%;overflow-x:auto}
-nav a{display:flex;align-items:center;padding:0 14px;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
+nav a{display:flex;align-items:center;padding:0 11px;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
 nav a.on{color:var(--text);border-bottom-color:var(--accent)}nav a:hover{color:var(--text)}
 .asof{margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap}
 main{padding:18px 22px 60px;max-width:1700px;margin:0 auto}
@@ -103,6 +103,7 @@ table.trades tbody tr{cursor:pointer} tr.sel td{background:#1d2a3a!important}
     <a href="#sectors" data-r="sectors">Sectors</a>
     <a href="#rotation" data-r="rotation">Sector Rotation</a>
     <a href="#zacks" data-r="zacks">Zacks</a>
+    <a href="#zpf" data-r="zpf">Z Portfolio</a>
     <a href="#download" data-r="download">Download</a>
   </nav>
   <div class="hsearch"><input id="gq" placeholder="Search ticker or company…  ( / )" autocomplete="off" spellcheck="false"></div>
@@ -667,6 +668,9 @@ async function viewChart(ticker,focus){
     if(c[i]!=null&&c[i]>hh) markers.push({i,pos:"below",dir:"up",size:4.5,color:"#7fc4ff"});
     let ll=Infinity; for(let k=i-20;k<i;k++) if(l[k]!=null&&l[k]<ll) ll=l[k];                          // close below previous 20-day low
     if(c[i]!=null&&c[i]<ll) markers.push({i,pos:"above",dir:"down",size:4.5,color:"#ff8a80"}); }
+  try{ const zp=await J("data/zportfolio.json"); for(const p of (zp.positions||[]).filter(p=>p.ticker===ticker)){
+      const ei=idx[p.entry_date]; if(ei!=null) markers.push({i:ei,pos:"below",dir:"up",size:9,stroke:true,color:"#9c6ade",text:"Z BUY"});
+      const xi=idx[p.exit_date]; if(p.status==="closed"&&xi!=null) markers.push({i:xi,pos:"above",dir:"down",size:9,stroke:true,color:"#9c6ade",text:"Z SELL "+pct(p.pnl,1)}); } }catch(e){}
   let levels=[], zi=null; try{ const ZI=await (CH.zi ||= J("data/zinfo.json")); zi=ZI[ticker]||null; } catch(e){}
   if(zi){ const last=c.at(-1), lab=(n,v)=>`${n} ${fmtPx(v)} (${v>=last?"+":""}${((v/last-1)*100).toFixed(1)}%)`;
     if(zi.target) levels.push({v:zi.target,color:"#9c6ade",label:lab("Price target",zi.target)});
@@ -1030,6 +1034,50 @@ async function viewZacks(){
   head(); body();
 }
 
+
+/* ------------------------------------------------------------------ ZACKS PORTFOLIO (tracked forward) */
+const ZP={st:{open:{k:"pnl",d:-1},closed:{k:"exit_date",d:-1},pend:{k:"rs",d:-1}}};
+async function viewZPortfolio(){
+  let z; try{ z=await J("data/zportfolio.json"); }catch(e){ z=null; }
+  const R=z&&z.rules||{};
+  const rulesTxt=`Buy at the next open when, at the close: Zacks Rank ≤ <b>${R.max_rank??2}</b> · average broker rating &lt; <b>${R.max_broker??2}</b> (Buy / Strong Buy) ·
+    Zacks price target ≥ <b>+${R.min_upside_pct??10}%</b> above the close · EMA uptrend set (${EMA_TXT}) · RS rating ≥ <b>${R.min_rs??80}</b> · passes the scanner's liquidity filter.
+    Sell at the next open after a close below EMA${EMA.exit}, or when the Zacks Rank falls to ${R.sell_rank??4} or worse.
+    $${num(R.dollars_per_trade??10000,0)} per position, ${R.cost_pct??0.05}% cost per buy/sell. Tracked forward from the first day — no backtest (there is no Zacks history before that).`;
+  if(!z){ $("#main").innerHTML=`<h2>Zacks portfolio</h2><div class="card"><p class="note">${rulesTxt}</p><div class="empty">Tracking starts with the next daily scan.</div></div>`; return; }
+  await stocks();
+  const P=z.positions||[], open=P.filter(p=>p.status==="open"||p.status==="exit next open"), pend=P.filter(p=>p.status==="pending"), closed=P.filter(p=>p.status==="closed");
+  const D=R.dollars_per_trade||10000, upl=open.reduce((a,p)=>a+(p.pnl||0)/100*D,0), rpl=closed.reduce((a,p)=>a+(p.pnl||0)/100*D,0);
+  const avgO=open.length?open.reduce((a,p)=>a+(p.pnl||0),0)/open.length:null, wins=closed.filter(p=>p.pnl>0).length;
+  const kp=(l,v,sub,c="")=>`<div class="kpi"><div class="l">${l}</div><div class="v ${c}">${v}</div>${sub?`<div class="s">${sub}</div>`:""}</div>`;
+  $("#main").innerHTML=`<div class="row" style="margin-bottom:12px;justify-content:space-between"><div class="row"><h2>Zacks portfolio</h2>
+      <span class="muted">tracking since ${fd(z.start)} · prices to ${fd(z.data_date)}</span></div><button id="zpexp">⬇ Export (CSV)</button></div>
+    <div class="kpis">${kp("Open positions",open.length,`${pend.length} buy order${pend.length===1?"":"s"} for the next open`)}
+      ${kp("Open P&amp;L",`$${num(upl,0)}`,`average ${pct(avgO)}`,cls(upl))}
+      ${kp("Closed P&amp;L",`$${num(rpl,0)}`,`${closed.length} closed · ${closed.length?Math.round(wins/closed.length*100)+"% winners":"–"}`,cls(rpl))}
+      ${kp("Total P&amp;L",`$${num(upl+rpl,0)}`,`on $${num(D,0)} per position`,cls(upl+rpl))}</div>
+    <div class="card"><p class="note" style="margin:0">${rulesTxt}</p></div>
+    <div class="card"><h3>Buy orders for the next open <span class="n">${pend.length}</span> <small>signals at the ${fd(z.last_day)} close</small></h3><div class="tbl-wrap scroll" id="zpP"></div></div>
+    <div class="card"><h3>Open positions <span class="n">${open.length}</span> <small>click a ticker for its chart · rank / brokers now vs at entry</small></h3><div class="tbl-wrap scroll" id="zpO"></div></div>
+    <div class="card"><h3>Closed positions <span class="n">${closed.length}</span></h3><div class="tbl-wrap scroll" id="zpC"></div></div>`;
+  const nm=t=>esc(((STOCKS.map[t]||{}).name)||"");
+  const rk=(a,b)=>a==null?"–":(b!=null&&b!==a?`<span style="color:${b<a?"#26a69a":"#ef5350"}">${a}→${b}</span>`:`${a}`);
+  const tk=p=>`<span class="tk" data-tk="${esc(p.ticker)}">${esc(p.ticker)}</span> <span class="muted">${nm(p.ticker)}</span>`;
+  const COL={
+    pend:[["ticker","Ticker",tk],["rank","Zacks Rank",p=>p.rank],["broker","Brokers",p=>p.broker],["upside","Target upside",p=>pct(p.upside,1)],["target","Price target",p=>fmtPx(p.target)],["rs","RS",p=>p.rs],["signal_close","Signal close",p=>fmtPx(p.signal_close)],["signal_date","Signal",p=>fd(p.signal_date)]],
+    open:[["ticker","Ticker",tk],["entry_date","Bought",p=>fd(p.entry_date)],["entry","Entry",p=>fmtPx(p.entry)],["last","Last",p=>fmtPx(p.last)],["pnl","P&L",p=>`<b class="${cls(p.pnl)}">${pct(p.pnl)}</b>`],["days","Days",p=>p.days??0],
+      ["rank","Rank (entry→now)",p=>rk(p.rank,p.rank_now)],["broker","Brokers (entry→now)",p=>rk(p.broker,p.broker_now)],["target","Price target",p=>fmtPx(p.target)],["rs","RS at entry",p=>p.rs],["status","Status",p=>p.status==="exit next open"?`<span class="gold">sell next open</span> <span class="muted">${esc(p.reason||"")}</span>`:"open"]],
+    closed:[["ticker","Ticker",tk],["entry_date","Bought",p=>fd(p.entry_date)],["entry","Entry",p=>fmtPx(p.entry)],["exit_date","Sold",p=>fd(p.exit_date)],["exit","Exit",p=>fmtPx(p.exit)],["pnl","P&L",p=>`<b class="${cls(p.pnl)}">${pct(p.pnl)}</b>`],["reason","Why sold",p=>esc(p.reason||"")],["rank","Rank at entry",p=>p.rank],["broker","Brokers at entry",p=>p.broker]]};
+  const tbl=(box,rows,key,empty)=>{ const st=ZP.st[key], cols=COL[key], draw=()=>{ const srt=sortRows(rows,st.k,st.d);
+      box.innerHTML=rows.length?`<table><thead><tr>${cols.map(([k,l])=>`<th data-k="${k}">${l}${st.k===k?(st.d>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>${srt.map(p=>`<tr>${cols.map(([,,f])=>`<td>${f(p)}</td>`).join("")}</tr>`).join("")}</tbody></table>`:`<div class="empty">${empty}</div>`;
+      box.querySelectorAll("th").forEach(h=>h.onclick=()=>{ st.d=st.k===h.dataset.k?-st.d:-1; st.k=h.dataset.k; draw(); }); }; draw(); };
+  tbl($("#zpP"),pend,"pend","No new buy signals at the last close.");
+  tbl($("#zpO"),open,"open",pend.length?"No open positions yet — the buy orders above fill at the next open.":"No open positions.");
+  tbl($("#zpC"),closed,"closed","Nothing sold yet.");
+  $("#zpexp").onclick=()=>saveCSV(`zacks-portfolio-${z.data_date}.csv`,[["Ticker","Status","Signal date","Bought","Entry","Sold","Exit","Last","P&L %","Reason","Rank at entry","Brokers at entry","Upside at entry %","RS at entry","Rank now","Brokers now"],
+    ...P.map(p=>[p.ticker,p.status,p.signal_date,p.entry_date||"",p.entry??"",p.exit_date||"",p.exit??"",p.last??"",p.pnl??"",p.reason||"",p.rank,p.broker,p.upside,p.rs,p.rank_now??"",p.broker_now??""])]);
+}
+
 /* ------------------------------------------------------------------ router */
 async function route(){
   const [r,arg,arg2]=(location.hash.slice(1)||"portfolio").split("/");
@@ -1038,7 +1086,7 @@ async function route(){
   if(PF.eq&&r!=="portfolio"){ PF.eq.destroy(); PF.eq=null; }
   try{
     if(r==="scanner") await viewScanner(); else if(r==="chart") await viewChart(arg&&decodeURIComponent(arg),arg2);
-    else if(r==="watchlist") await viewWatchlist(); else if(r==="download") await viewDownload(); else if(r==="sectors") await viewSectors(arg==="group"?decodeURIComponent(arg2||""):""); else if(r==="rotation") await viewRotation(); else if(r==="zacks") await viewZacks(); else await viewPortfolio();
+    else if(r==="watchlist") await viewWatchlist(); else if(r==="download") await viewDownload(); else if(r==="sectors") await viewSectors(arg==="group"?decodeURIComponent(arg2||""):""); else if(r==="rotation") await viewRotation(); else if(r==="zacks") await viewZacks(); else if(r==="zpf") await viewZPortfolio(); else await viewPortfolio();
   }catch(e){ console.error(e); $("#main").innerHTML=`<div class="empty">Could not load this page (${esc(e.message)}).</div>`; }
 }
 window.addEventListener("hashchange",route);

@@ -75,7 +75,7 @@ def _sector_table(rows):
     return "".join(out)
 
 
-def build_email(result, bt=None):
+def build_email(result, bt=None, zp=None):
     lim = CONFIG["report"]["max_rows_email"]
     b = result["benchmark"]
     site = os.environ.get("SITE_URL", "")
@@ -89,6 +89,7 @@ def build_email(result, bt=None):
         f'{result["universe_size"]} stocks scanned · {result["breadth"]["pct_in_trend"]}% in EMA trend · '
         f'{result["breadth"]["pct_above_ema200"]}% above 200 EMA</p>',
         f'<p style="margin:0 0 8px"><a href="{site}">Open the full website →</a></p>' if site else "",
+        _zport_section(zp, h2, site),
         _strategy_section(bt, h2, site),
         _zacks_section(result, h2, lim),
         f'<h2 {h2}>🚀 EMA trend + {CONFIG["breakout"]["lookback_days"]}-day breakout ({len(result["breakouts"])})</h2>',
@@ -147,6 +148,35 @@ def _zacks_section(result, h2, lim):
             + _stock_table(rows, lim))
 
 
+def _zport_section(zp, h2, site):
+    """Zacks portfolio: today's buy and sell orders, and how the open positions are doing."""
+    if not zp:
+        return ""
+    P = zp.get("positions", [])
+    day = zp.get("last_day")
+    buys = [p for p in P if p["status"] == "pending" and p.get("signal_date") == day]
+    sells = [p for p in P if p["status"] == "exit next open" and p.get("exit_signal") == day]
+    opn = [p for p in P if p["status"] in ("open", "exit next open")]
+    closed = [p for p in P if p["status"] == "closed"]
+    r = zp.get("rules", {})
+
+    def b(p):
+        return (f'<b>{escape(p["ticker"])}</b> (#{p["rank"]}, brokers {p["broker"]}, '
+                f'target +{p["upside"]}%, RS {p["rs"]})')
+    sell_txt = ", ".join(f'<b>{escape(p["ticker"])}</b> (<span style="color:{_color(p.get("pnl"))}">'
+                         f'{_fmt(p.get("pnl"), "%")}</span>, {escape(p.get("reason", ""))})' for p in sells) or "none"
+    avg = sum(p["pnl"] for p in opn if p.get("pnl") is not None) / max(1, sum(p.get("pnl") is not None for p in opn))
+    wins = sum(p["pnl"] > 0 for p in closed)
+    return (f'<h2 {h2}>🎯 Zacks portfolio — orders for the next open</h2>'
+            f'<p style="margin:2px 0">Buy: {", ".join(b(p) for p in buys) or "none"}</p>'
+            f'<p style="margin:2px 0 8px">Sell: {sell_txt}</p>'
+            f'<p style="margin:0 0 16px;font-size:12px;color:#555">Tracking since {fmt_date(zp.get("start"))} · '
+            f'{len(opn)} open (average <span style="color:{_color(avg)}">{_fmt(avg, "%")}</span>) · '
+            f'{len(closed)} closed, {wins} winners · rules: Zacks Rank ≤ {r.get("max_rank")}, brokers &lt; {r.get("max_broker")}, '
+            f'target ≥ +{r.get("min_upside_pct")}%, EMA uptrend, RS ≥ {r.get("min_rs")}'
+            + (f' · <a href="{site}#zpf">details</a>' if site else "") + "</p>")
+
+
 def _strategy_section(bt, h2, site):
     if not bt:
         return ""
@@ -175,9 +205,9 @@ def _strategy_section(bt, h2, site):
             + (f' · <a href="{site}#portfolio">details</a>' if site else "") + "</p>")
 
 
-def send_email(result, bt=None):
+def send_email(result, bt=None, zp=None):
     user, pwd, to = (os.environ.get(k) for k in ("SMTP_USER", "SMTP_PASSWORD", "EMAIL_TO"))
-    subject, html = build_email(result, bt)
+    subject, html = build_email(result, bt, zp)
     (ROOT / "results" / "last_email.html").write_text(html)
     if not (user and pwd and to):
         print("email not sent: SMTP_USER / SMTP_PASSWORD / EMAIL_TO not set (saved results/last_email.html)")

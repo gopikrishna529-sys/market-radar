@@ -124,3 +124,16 @@ zacks:
     #   file: zacks_other
   # columns drawn as dashed lines on the chart: any column whose name contains one of these words
   chart_levels: [target]
+
+# Zacks portfolio (Zacks Portfolio tab) - a paper portfolio tracked forward from its first day.
+#   Buy next open when: Zacks Rank <= max_rank, average broker rating < max_broker,
+#   Zacks price target >= min_upside_pct above the close, EMA uptrend set, RS rating >= min_rs,
+#   and the stock passes the universe liquidity filter above.
+#   (and the close is above the exit EMA). Sell next open after a close below the exit EMA, or when the Zacks Rank falls to sell_rank or worse.
+zacks_portfolio:
+  max_rank: 2
+  max_broker: 2.0
+  min_upside_pct: 10
+  min_rs: 80
+  sell_rank: 4
+  dollars_per_trade: 10000

@@ -11,6 +11,9 @@ on:
     - cron: "0 2 * * 2-6"
     - cron: "30 5 * * 2-6"
   workflow_dispatch:        # "Run workflow" button: also downloads older history and rebuilds everything
+  workflow_run:             # after every Zacks download: rebuild the website with the new Zacks file (no email)
+    workflows: ["Zacks screen download"]
+    types: [completed]
 
 permissions:
   contents: write
@@ -24,6 +27,7 @@ concurrency:
 
 jobs:
   scan:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     environment:
@@ -58,7 +62,7 @@ jobs:
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
         run: |
-          python run.py ${{ github.event_name == 'workflow_dispatch' && '--force' || '' }}
+          python run.py ${{ github.event_name == 'workflow_dispatch' && '--force' || github.event_name == 'workflow_run' && '--site' || '' }}
           if [ -f site/index.html ]; then echo "site=yes" >> "$GITHUB_OUTPUT"; fi
 
       - name: Save new data to the repository
