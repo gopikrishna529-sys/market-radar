@@ -120,6 +120,7 @@ def build_site(w, ind):
     z = load_latest()
     if z:
         ti = z["ticker_col"]
+        _merge_screens(z)                       # add the other saved screens' columns (broker rating, price target ...)
         ours = {r[0]: r for r in rows}
         zr = []
         for r in z["rows"]:
@@ -137,6 +138,32 @@ def build_site(w, ind):
     (SITE / "index.html").write_text(html)
     (SITE / ".nojekyll").write_text("")
     print(f"website built: {len(chart_set)} charts, {len(dates)} days of scans")
+
+
+def _merge_screens(z):
+    """Join the newest file of every other configured Zacks screen onto the main screen, by ticker."""
+    from .zacks import _screens, broker_txt, load_latest
+    ti, have = z["ticker_col"], {c.strip().lower() for c in z["columns"]}
+    for pre in _screens()[1][1:]:
+        o = load_latest(pre)
+        if not o:
+            continue
+        oti = o["ticker_col"]
+        add = [i for i, c in enumerate(o["columns"])
+               if i != oti and c.strip().lower() not in have and c.strip().lower() not in ("company name", "company")]
+        if not add:
+            continue
+        by = {r[oti]: r for r in o["rows"]}
+        bi = next((i for i in add if "broker rec" in o["columns"][i].lower()), None)
+        z["columns"] = z["columns"] + [o["columns"][i] for i in add] + (["Broker rating"] if bi is not None else [])
+        have |= {o["columns"][i].strip().lower() for i in add}
+        for k, r in enumerate(z["rows"]):
+            src = by.get(r[ti])
+            extra = [src[i] if src and i < len(src) else "" for i in add]
+            if bi is not None:
+                b = src[bi] if src and bi < len(src) else None
+                extra.append(broker_txt(b) if isinstance(b, (int, float)) else "")
+            z["rows"][k] = r + extra
 
 
 def _profile(t, prof, ptype, pexch, last, EXCHANGES):

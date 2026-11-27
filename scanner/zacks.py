@@ -82,35 +82,33 @@ def broker_txt(x):
     return ("Strong Buy" if x < 1.5 else "Buy" if x < 2.5 else "Hold" if x < 3.5 else "Sell" if x < 4.5 else "Strong Sell")
 
 
-def rank_history(prefixes=None):
-    """Zacks Rank per ticker over every saved day, kept only where it changed:
-    {ticker: [["2026-11-26", 2], ["2026-12-03", 1], ["2026-12-09", None], ...]}
-    None = the ticker dropped out of the saved screens that day (its rank is no longer known)."""
-    if prefixes is None:
-        prefixes = _screens()[1]
-    by_day = {}                                     # date -> {prefix: {ticker: rank}}
+def _history(prefixes, need, avoid, conv):
+    """One Zacks column per ticker over every saved day, kept only where it changed:
+    {ticker: [["2026-11-26", v], ["2026-12-03", v2], ["2026-12-09", None], ...]}
+    None = the ticker dropped out of the saved screens that day (the value is no longer known)."""
+    by_day = {}                                     # date -> {prefix: {ticker: value}}
     for pre in prefixes:
         for f in _files(pre):
             z = _read(f)
             if not z:
                 continue
-            ri = _find(z["columns"], "zacks rank", avoid=("industry",))
-            ranks = {}
+            ci = _find(z["columns"], *need, avoid=avoid)
+            vals = {}
             for r in z["rows"]:
-                v = r[ri] if ri is not None and ri < len(r) else None
-                ranks[r[z["ticker_col"]]] = int(v) if isinstance(v, (int, float)) and 1 <= v <= 5 else None
-            by_day.setdefault(z["date"], {})[pre] = ranks
+                v = r[ci] if ci is not None and ci < len(r) else None
+                vals[r[z["ticker_col"]]] = conv(v) if isinstance(v, (int, float)) else None
+            by_day.setdefault(z["date"], {})[pre] = vals
     hist, last = {}, {}
     for day in sorted(by_day):
         screens = by_day[day]
         today = {}
-        for ranks in screens.values():
-            for t, v in ranks.items():
+        for vals in screens.values():
+            for t, v in vals.items():
                 if v is not None or t not in today:
                     today[t] = v if v is not None else today.get(t)
         complete = all(p in screens for p in prefixes)   # a missing file is not a drop-out
         for t, v in today.items():
-            if v is None and t in last:
+            if v is None:                                # in a screen without this column
                 continue
             if last.get(t, "x") != v:
                 hist.setdefault(t, []).append([day, v])
@@ -120,6 +118,17 @@ def rank_history(prefixes=None):
                 hist[t].append([day, None])
                 last[t] = None
     return hist
+
+
+def rank_history(prefixes=None):
+    """Zacks Rank (1 = Strong Buy ... 5 = Strong Sell) change points per ticker."""
+    return _history(prefixes or _screens()[1], ("zacks rank",), ("industry",),
+                    lambda v: int(v) if 1 <= v <= 5 else None)
+
+
+def broker_history(prefixes=None):
+    """Average broker recommendation (1.0 = Strong Buy ... 5.0 = Strong Sell) change points per ticker."""
+    return _history(prefixes or _screens()[1], ("broker rec",), (), lambda v: round(float(v), 2) if 1 <= v <= 5 else None)
 
 
 def load_info():
@@ -151,9 +160,10 @@ def load_info():
                 v = r[i] if i < len(r) else None
                 if isinstance(v, (int, float)) and v > 0:
                     d.setdefault("levels", []).append([c, round(float(v), 2)])
-    for t, h in rank_history(prefixes).items():
-        if len(h) > 1 or t in info:
-            info.setdefault(t, {})["hist"] = h
+    for key, hist in (("hist", rank_history(prefixes)), ("bhist", broker_history(prefixes))):
+        for t, h in hist.items():
+            if len(h) > 1 or t in info:
+                info.setdefault(t, {})[key] = h
     for t, d in info.items():
         if isinstance(d.get("rank"), (int, float)):
             d["rank"] = int(d["rank"])

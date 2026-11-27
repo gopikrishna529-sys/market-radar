@@ -266,8 +266,10 @@ class RChart{
       }
       const used={};
       for(const m of (p.markers||[])){ if(m.i<i0||m.i>i1) continue; const x=this.xOf(m.i); const s=p.series[0]; const below=m.pos==="below";
-        const z=m.size||8, key=m.i+(below?"b":"a"), off=used[key]||0; used[key]=off+z*1.6+(m.text?18:4);
+        const z=m.pill?0:(m.size||8), key=m.i+(below?"b":"a"), off=used[key]||0; used[key]=off+z*1.6+(m.text?(m.pill?20:18):4);
         const yb=below?Y(s.l[m.i])+6+off:Y(s.h[m.i])-6-off; const upd=m.dir?m.dir==="up":below;
+        if(m.pill){ g.font=`700 11.5px ${F}`; g.textAlign="center"; const ty=below?yb+10:yb-10, tw3=g.measureText(m.text).width+10;
+          g.fillStyle=m.color; g.globalAlpha=.92; g.fillRect(x-tw3/2,ty-8,tw3,17); g.globalAlpha=1; g.fillStyle="#fff"; g.fillText(m.text,x,ty+.5); continue; }
         g.fillStyle=m.color; g.beginPath();
         if(upd){ const t=below?yb:yb-z*1.6; g.moveTo(x,t); g.lineTo(x-z,t+z*1.6); g.lineTo(x+z,t+z*1.6); }
         else { const t=below?yb+z*1.6:yb; g.moveTo(x,t); g.lineTo(x-z,t-z*1.6); g.lineTo(x+z,t-z*1.6); }
@@ -633,12 +635,12 @@ async function viewChart(ticker,focus){
       ${recent.length>1?`<span class="muted">Recent:</span><div class="chips">${recent.slice(1,9).map(t=>`<span class="chip" data-tk="${esc(t)}">${esc(t)}</span>`).join("")}<span class="chip" id="rclr" title="Clear recent tickers">✕</span></div>`:""}</div>
     <div class="card" style="padding:12px 14px"><div class="info" id="cinfo"></div><div class="info zstrip" id="zstrip"></div></div>
     <div class="card" style="padding:8px" id="cvcard"><div class="row" style="padding:2px 4px 8px;gap:8px">
-        <span class="muted">Panels:</span><div class="seg" id="pnl"><button data-p="macd">MACD</button><button data-p="dmi">DMI</button><button data-p="tgt" title="Zacks price targets (from your saved screens)">🎯 Targets</button><button data-p="zr" title="Vertical lines where the Zacks Rank was upgraded (green) or downgraded (red)">Z Rank changes</button></div>
+        <span class="muted">Panels:</span><div class="seg" id="pnl"><button data-p="macd">MACD</button><button data-p="dmi">DMI</button><button data-p="tgt" title="Zacks price targets (from your saved screens)">🎯 Targets</button><button data-p="zr" title="Zacks Rank and broker rating under the candles; vertical lines where they were upgraded (green) or downgraded (red)">Z Rank / Brokers</button></div>
         <button id="fsb" style="margin-left:auto">⛶ Full screen</button></div><div id="cv"></div>
       <div class="note" style="padding:6px 8px 2px">Drag the chart, sideways swipe or Shift + scroll = move · mouse wheel, pinch or ＋/－ = zoom · scroll or drag on the price axis = zoom prices (any pane) · scroll the page from outside the chart · double-click = reset to 70 candles · 📏 Measure (or Shift): drag, or click the start and click again at the end · Esc clears.<br><span style="color:#26a69a">▲ BUY</span> / <span style="color:#ef5350">▼ SHORT</span> = strategy entry (next open after the EMA trend is set) ·
       <span class="gold">EXIT</span> = position closed, with its result · <span style="color:#7fc4ff">small ▲ under a candle</span> = close above the previous 20-day high · <span style="color:#ff8a80">small ▼ above a candle</span> = close below the previous 20-day low ·
       green / red shading = EMA uptrend / downtrend (${EMA_TXT}) ·
-      <span style="color:#26a69a">│ Z▲</span> / <span style="color:#ef5350">│ Z▼</span> = Zacks Rank upgraded / downgraded that day (1 = Strong Buy … 5 = Strong Sell; history starts with the first saved Zacks file)</div></div>
+      <b>Rank 1</b> / <b>Brokers 1.56</b> tags under a candle = Zacks Rank / average broker rating from that day (shown again whenever it changes) · <span style="color:#26a69a">│ ▲</span> / <span style="color:#ef5350">│ ▼</span> line = upgraded / downgraded that day (1 = Strong Buy … 5 = Strong Sell; history starts with the first saved Zacks file)</div></div>
     <div class="card"><h3>Backtest trades in ${esc(ticker)} <small>click a trade to jump to it on the chart</small></h3><div class="tbl-wrap scroll" id="ctr"><div class="loading">…</div></div></div>`;
   attachAC($("#cq"),t=>{ location.hash="#chart/"+encodeURIComponent(t); });
   $("#cf").onsubmit=e=>{e.preventDefault(); const q=$("#cq").value.trim().toUpperCase(); const hit=st.map[q]?q:(searchStocks(q,1)[0]||{}).ticker; location.hash="#chart/"+encodeURIComponent(hit||q);};
@@ -664,11 +666,11 @@ async function viewChart(ticker,focus){
     if(c[i]!=null&&c[i]<ll) markers.push({i,pos:"above",dir:"down",size:4.5,color:"#ff8a80"}); }
   let levels=[], zi=null; try{ const ZI=await (CH.zi ||= J("data/zinfo.json")); zi=ZI[ticker]||null; } catch(e){}
   if(zi){ const last=c.at(-1), lab=(n,v)=>`${n} ${fmtPx(v)} (${v>=last?"+":""}${((v/last-1)*100).toFixed(1)}%)`;
-    if(zi.target) levels.push({v:zi.target,color:"#9c6ade",label:lab("Avg broker target",zi.target)});
+    if(zi.target) levels.push({v:zi.target,color:"#9c6ade",label:lab("Price target",zi.target)});
     for(const [n,v] of (zi.levels||[])) levels.push({v,color:"#7e57c2",label:lab(n.replace(/zacks\s*/i,""),v)}); }
   $("#zstrip").innerHTML=zacksStrip(zi,c.at(-1));
-  const zl=zacksLines(zi&&zi.hist,dates);
-  const PANES={price:{w:3.2,title:ticker+" · D"+(zi&&zi.rank?` · Zacks #${zi.rank} ${zi.rank_txt}`:"")+(zi&&zi.broker!=null?` · Brokers ${(+zi.broker).toFixed(2)} ${zi.broker_txt}`:""),bands,markers,get refs(){ return CH.hide.tgt?[]:levels; },series:[{type:"candle",o,h,l,c,tag:true,tagColor:c.at(-1)>=o.at(-1)?"#26a69a":"#ef5350"},
+  const {lines:zl,tags:ztags}=zacksHistory(zi,dates);
+  const PANES={price:{w:3.2,title:ticker+" · D"+(zi&&zi.rank?` · Zacks #${zi.rank} ${zi.rank_txt}`:"")+(zi&&zi.broker!=null?` · Brokers ${(+zi.broker).toFixed(2)} ${zi.broker_txt}`:""),bands,get markers(){ return CH.hide.zr?markers:markers.concat(ztags); },get refs(){ return CH.hide.tgt?[]:levels; },series:[{type:"candle",o,h,l,c,tag:true,tagColor:c.at(-1)>=o.at(-1)?"#26a69a":"#ef5350"},
       ...EP.map((p,k)=>({type:"line",name:"EMA"+p,v:t.e[p],color:EMA_COL[p]||["#00bcd4","#4c9ffe","#f5a623","#ec407a","#c77dff"][k%5],width:1.2+k*.2})),
       {type:"volume",v,o,c,overlay:true,nolegend:true}]},
     macd:{w:1,title:"MACD 12 26 9",fmt:x=>x.toFixed(Math.abs(x)<1?3:2),refs:[{v:0,inRange:true}],series:[
@@ -926,59 +928,103 @@ function zacksStrip(zi,last){
   const out=[`<span class="muted">Zacks <small>(${fd(zi.date)})</small></span>`];
   if(zi.rank) out.push(`<span class="muted">Rank</span>${pill("#"+zi.rank+" "+zi.rank_txt,ZCOL[zi.rank],"Zacks Rank: 1 = Strong Buy … 5 = Strong Sell")}`);
   if(zi.broker!=null&&zi.broker!=="") out.push(`<span class="muted">Brokers</span>${pill((+zi.broker).toFixed(2)+" "+zi.broker_txt,bcol(+zi.broker),"Average broker recommendation: 1.0 = Strong Buy … 5.0 = Strong Sell")}`);
-  if(zi.target) out.push(`<span class="muted">Avg target</span><b>${fmtPx(zi.target)}</b><span class="${cls(zi.target-last)}">${pct((zi.target/last-1)*100,1)} from here</span>`);
+  if(zi.target) out.push(`<span class="muted">Price target</span><b>${fmtPx(zi.target)}</b><span class="${cls(zi.target-last)}">${pct((zi.target/last-1)*100,1)} from here</span>`);
   const sc=[["value","Value"],["growth","Growth"],["momentum","Momentum"],["vgm","VGM"]].filter(([k])=>zi[k]);
   if(sc.length) out.push(`<span class="muted">Scores</span>`+sc.map(([k,l])=>`<span class="muted">${l}</span>${pill(zi[k],SCOL[zi[k]]||"#555","Style score: A best … F worst")}`).join(""));
   return out.join(" ");
 }
 
-/* Zacks Rank history -> vertical lines on the chart. hist = [[YYYY-MM-DD, rank|null], ...] (change points only).
-   A rank seen before the open on a day belongs to that day's candle; if that candle isn't in the data yet,
-   the line sits just right of the last candle. */
-function zacksLines(hist,dates){
-  if(!hist||!hist.length) return [];
-  const n=dates.length, at=d=>{ let lo=0,hi=n; while(lo<hi){ const m=(lo+hi)>>1; if(dates[m]<d) lo=m+1; else hi=m; } return lo; };   // first candle on/after d
-  const out=[]; let prev=null;
-  hist.forEach(([d,r],k)=>{ const i=at(d);
-    if(k===0){ if(r) out.push({i,color:"#6b7785",dash:[3,4],width:1.2,alpha:.8,label:`Z #${r} ${RANK_TXT[r]} · tracking from ${fd(d)}`}); }
-    else if(r==null) out.push({i,color:"#6b7785",dash:[3,4],width:1.2,alpha:.8,label:`Z left screen ${fd(d)} (was #${prev})`});
-    else if(prev==null) out.push({i,color:ZCOL[r],dash:[6,4],label:`Z back in screen #${r} ${RANK_TXT[r]} ${fd(d)}`});
-    else { const up=r<prev; out.push({i,color:up?"#26a69a":"#ef5350",width:2,label:`Z${up?"▲ upgrade":"▼ downgrade"} #${prev}→#${r} ${RANK_TXT[r]} · ${fd(d)}`}); }
+/* Zacks history -> chart. zi.hist (rank) / zi.bhist (broker rating) = [[YYYY-MM-DD, value|null], ...], change points only.
+   Every value gets a tag under its candle; an upgrade/downgrade also gets a vertical line.
+   A value seen before the open on a day belongs to that day's candle (or the last candle, until that one arrives). */
+const BRK_TXT=b=>b<1.5?"Strong Buy":b<2.5?"Buy":b<3.5?"Hold":b<4.5?"Sell":"Strong Sell", BRK_COL=b=>ZCOL[Math.min(5,Math.max(1,Math.round(b)))];
+function zacksHistory(zi,dates){
+  const lines=[], tags=[], n=dates.length; if(!zi) return {lines,tags};
+  const at=d=>{ let lo=0,hi=n; while(lo<hi){ const m=(lo+hi)>>1; if(dates[m]<d) lo=m+1; else hi=m; } return lo; };   // first candle on/after d
+  const UP="#26a69a", DN="#ef5350", GREY="#6b7785";
+  let prev=null;
+  (zi.hist||[]).forEach(([d,r],k)=>{ const i=at(d), ti=Math.min(i,n-1);
+    if(r==null){ lines.push({i,color:GREY,dash:[3,4],width:1.2,alpha:.8,label:`Left Zacks screen ${fd(d)} (was Rank ${prev})`}); tags.push({i:ti,pos:"below",pill:true,color:GREY,text:"Rank ?"}); }
+    else { tags.push({i:ti,pos:"below",pill:true,color:ZCOL[r],text:`Rank ${r}`});
+      if(k>0&&prev!=null&&prev!==r){ const up=r<prev; lines.push({i,color:up?UP:DN,width:2,label:`Rank ${up?"▲ upgrade":"▼ downgrade"} ${prev}→${r} ${RANK_TXT[r]} · ${fd(d)}`}); } }
     prev=r; });
-  return out;
+  prev=null;
+  (zi.bhist||[]).forEach(([d,b],k)=>{ const i=at(d), ti=Math.min(i,n-1);
+    if(b==null){ tags.push({i:ti,pos:"below",pill:true,color:GREY,text:"Brokers ?"}); }
+    else { tags.push({i:ti,pos:"below",pill:true,color:BRK_COL(b),text:`Brokers ${b.toFixed(2)} ${BRK_TXT(b)}`});
+      if(k>0&&prev!=null&&BRK_TXT(prev)!==BRK_TXT(b)){ const up=b<prev; lines.push({i,color:up?UP:DN,width:1.6,dash:[6,4],label:`Brokers ${up?"▲ upgrade":"▼ downgrade"} ${prev.toFixed(2)}→${b.toFixed(2)} ${BRK_TXT(b)} · ${fd(d)}`}); } }
+    prev=b; });
+  const last={}; tags.forEach(t=>{ last[t.text.split(" ")[0]+"|"+t.i]=t; });       // several Zacks days on one candle: keep the newest
+  return {lines,tags:Object.values(last)};
 }
 const RANK_TXT={1:"Strong Buy",2:"Buy",3:"Hold",4:"Sell",5:"Strong Sell"};
-const ZK={trend:"",nw:false,liq:false,q:"",st:{k:null,d:1}};
+const ZK={nw:false,liq:false,q:"",st:{k:null,d:1},cf:{},lim:400};
+/* Column filter text -> test. Numbers: "5", ">2", "<=1.5", "2-4" (range), "!3". Text: "buy" (contains), "=A" (exact), "A,B" (any of), "!F" (not). */
+function colTest(f,isNum){
+  f=(f||"").trim(); if(!f) return null; const lo=x=>String(x??"").toLowerCase();
+  const any=f.split(/\s*,\s*/).filter(Boolean);
+  if(any.length>1){ const ts=any.map(x=>colTest(x,isNum)); return v=>ts.some(t=>t(v)); }
+  if(f[0]==="!"&&f.length>1){ const t=colTest(f.slice(1),isNum); return v=>!t(v); }
+  if(isNum){ let m=f.match(/^(>=|<=|>|<|=)?\s*(-?\d*\.?\d+)\s*%?$/);
+    if(m){ const x=+m[2], op=m[1]||"="; return v=>typeof v==="number"&&(op===">"?v>x:op==="<"?v<x:op===">="?v>=x:op==="<="?v<=x:Math.abs(v-x)<1e-9); }
+    m=f.match(/^(-?\d*\.?\d+)\s*(?:-|to|\.\.)\s*(-?\d*\.?\d+)$/);
+    if(m){ const x=+m[1], y=+m[2]; return v=>typeof v==="number"&&v>=Math.min(x,y)&&v<=Math.max(x,y); } }
+  if(f[0]==="="){ const x=lo(f.slice(1)); return v=>lo(v)===x; }
+  const x=lo(f); return v=>lo(v).includes(x);
+}
 async function viewZacks(){
   let z; try{ z=await J("data/zacks.json"); }catch(e){ z=null; }
   if(!z){ $("#main").innerHTML=`<h2>Zacks screen</h2><div class="empty">No Zacks screen downloaded yet. It appears here after the “Zacks screen download” workflow has run once.</div>`; return; }
+  await stocks();
   const ti=z.ticker_col, nz=z.columns.length, newSet=new Set(z.new);
-  const zcols=z.columns.map((c,i)=>[i,c]).filter(([i])=>i!==ti);
-  const OUR=[[nz,"Trend"],[nz+2,"RS"],[nz+3,"Chg %"],[nz+4,"1M %"]];
+  const TR=r=>r[nz]==="L"?"Uptrend":r[nz]==="S"?"Downtrend":"No trend";
+  // every column: key, label, value getter, numeric?
+  const COLS=[{k:ti,l:z.columns[ti]||"Ticker",get:r=>r[ti]},
+    ...z.columns.map((c,i)=>({k:i,l:c,get:r=>r[i]})).filter(c=>c.k!==ti),
+    {k:"new",l:"New",get:r=>newSet.has(r[ti])?"New":"–"},
+    {k:nz,l:"Trend",get:TR,sortGet:r=>(r[nz]==="L"?1:r[nz]==="S"?-1:0)*1000+(r[nz+1]||0)},
+    {k:nz+1,l:"Days",get:r=>r[nz+1]??null},{k:nz+2,l:"RS",get:r=>r[nz+2]??null},
+    {k:nz+3,l:"Chg %",get:r=>r[nz+3]??null},{k:nz+4,l:"1M %",get:r=>r[nz+4]??null}];
+  for(const c of COLS){ const vals=z.rows.map(c.get).filter(v=>v!=null&&v!==""&&v!=="–"); c.num=vals.length>0&&vals.every(v=>typeof v==="number");
+    const dist=[...new Set(z.rows.map(c.get).map(v=>v==null||v===""?"–":v))]; c.opts=c.k!==ti&&dist.length<=12?dist.sort((a,b)=>typeof a==="number"&&typeof b==="number"?a-b:String(a).localeCompare(String(b))):null; }
   $("#main").innerHTML=`<div class="row" style="margin-bottom:12px;justify-content:space-between"><div class="row"><h2>Zacks screen</h2>
       <span class="muted">${fd(z.date)} · ${z.rows.length} stocks${z.prev_date?` · ${z.new.length} new since ${fd(z.prev_date)}`:""} · Zacks columns plus this site's EMA trend and RS</span></div>
       <button id="zexp">⬇ Export (CSV)</button></div>
     <div class="card"><div class="row" style="gap:10px">
-      <select id="ztr"><option value="">Any trend</option><option value="L">In EMA uptrend</option><option value="S">In EMA downtrend</option><option value="N">No trend</option></select>
+      <input id="zq" placeholder="Search every column (ticker, company, industry…)" style="width:340px">
       <label class="muted"><input type="checkbox" id="znew"> new in screen only</label>
       <label class="muted"><input type="checkbox" id="zliq"> liquid only (scanner filter)</label>
-      <input id="zq" placeholder="Filter ticker" style="width:160px"></div></div>
-    <div class="card"><h3>Stocks <span class="n" id="zcount"></span> <small>click a column to sort · click a ticker for its chart · <span class="gold">NEW</span> = not in the previous day's screen</small></h3><div class="tbl-wrap scroll" id="ztbl" style="max-height:640px"></div></div>`;
-  $("#ztr").value=ZK.trend; $("#znew").checked=ZK.nw; $("#zliq").checked=ZK.liq; $("#zq").value=ZK.q;
-  const filt=()=>z.rows.filter(r=>{ const s=r[nz]||"N"; return (!ZK.trend||s===ZK.trend)&&(!ZK.nw||newSet.has(r[ti]))&&(!ZK.liq||r[nz+5])&&(!ZK.q||String(r[ti]).includes(ZK.q.toUpperCase())); });
-  const draw=()=>{ let rows=filt(); if(ZK.st.k!=null) rows=sortRows(rows,ZK.st.k,ZK.st.d); $("#zcount").textContent=rows.length;
-    const th=(k,l)=>`<th data-zk="${k}">${esc(l)}${ZK.st.k===k?(ZK.st.d>0?" ▲":" ▼"):""}</th>`;
-    $("#ztbl").innerHTML=rows.length?`<table><thead><tr>${th(ti,z.columns[ti]||"Ticker")}${zcols.map(([i,c])=>th(i,c)).join("")}${OUR.map(([k,l])=>th(k,l)).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>
-      <td><span class="tk" data-tk="${esc(r[ti])}">${esc(r[ti])}</span>${newSet.has(r[ti])?' <span class="gold">NEW</span>':""} ${starHTML(r[ti])}</td>
-      ${zcols.map(([i])=>`<td class="${typeof r[i]==="number"?"":"nm"}">${esc(r[i]??"")}</td>`).join("")}
-      <td>${stateHTML(r[nz],r[nz+1])}</td><td>${r[nz+2]??"–"}</td><td class="${cls(r[nz+3])}">${pct(r[nz+3])}</td><td class="${cls(r[nz+4])}">${pct(r[nz+4],1)}</td></tr>`).join("")}</tbody></table>`:'<div class="empty">No stocks match.</div>';
-    document.querySelectorAll("#ztbl th").forEach(h=>h.onclick=()=>{ const k=+h.dataset.zk; ZK.st.d=ZK.st.k===k?-ZK.st.d:1; ZK.st.k=k; draw(); }); };
-  $("#ztr").onchange=e=>{ZK.trend=e.target.value;draw();}; $("#znew").onchange=e=>{ZK.nw=e.target.checked;draw();};
-  $("#zliq").onchange=e=>{ZK.liq=e.target.checked;draw();}; $("#zq").oninput=e=>{ZK.q=e.target.value;draw();};
-  $("#zexp").onclick=()=>{ const st=s=>s==="L"?"Uptrend":s==="S"?"Downtrend":"";
-    saveCSV(`zacks-${z.date}.csv`,[[z.columns[ti],...zcols.map(([,c])=>c),"New","EMA trend","Days in trend","RS","Chg %","1M %"],
-      ...filt().map(r=>[r[ti],...zcols.map(([i])=>r[i]),newSet.has(r[ti])?"yes":"",st(r[nz]),r[nz+1]||"",r[nz+2],r[nz+3],r[nz+4]])]); };
-  await stocks(); draw();
+      <button id="zclr">✕ Clear all filters</button></div>
+      <div class="note" style="margin-top:8px">Filter boxes under each column: numbers take <b>5</b>, <b>&gt;2</b>, <b>&lt;=1.5</b>, <b>2-4</b> (range), <b>!3</b> (not); text takes a word it contains, <b>=A</b> (exact), <b>A,B</b> (any of), <b>!F</b> (not). Columns with few values have a drop-down.</div></div>
+    <div class="card"><h3>Stocks <span class="n" id="zcount"></span> <small>click a column title to sort · click a ticker for its chart · <span class="gold">NEW</span> = not in the previous day's screen</small></h3><div class="tbl-wrap scroll" id="ztbl" style="max-height:680px"></div></div>`;
+  $("#znew").checked=ZK.nw; $("#zliq").checked=ZK.liq; $("#zq").value=ZK.q;
+  const hay=r=>{ const nm=(STOCKS.map[r[ti]]||{}).name||""; return (COLS.map(c=>c.get(r)).join(" ")+" "+nm).toLowerCase(); };
+  const filt=()=>{ const tests=COLS.map(c=>[c,ZK.cf[c.k]!=null&&ZK.cf[c.k]!==""?(c.opts&&ZK.cf[c.k].startsWith("\u0001")?(v=>String(v==null||v===""?"–":v)===ZK.cf[c.k].slice(1)):colTest(ZK.cf[c.k],c.num)):null]).filter(([,t])=>t);
+    const q=ZK.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return z.rows.filter(r=>(!ZK.nw||newSet.has(r[ti]))&&(!ZK.liq||r[nz+5])&&tests.every(([c,t])=>t(c.get(r)))&&(!q.length||(h=>q.every(w=>h.includes(w)))(hay(r)))); };
+  const fbox=c=>{ const v=ZK.cf[c.k]||"";
+    if(c.opts) return `<select data-cf="${c.k}" style="width:100%;min-width:70px"><option value="">All</option>${c.opts.map(o=>`<option value="\u0001${esc(o)}" ${v==="\u0001"+o?"selected":""}>${esc(o)}</option>`).join("")}</select>`;
+    return `<input data-cf="${c.k}" value="${esc(v)}" placeholder="${c.num?"&gt;2, 1-3":"contains"}" style="width:100%;min-width:64px;padding:3px 6px;font-size:12px">`; };
+  $("#ztbl").innerHTML=`<table><thead><tr id="zhead"></tr><tr class="zf">${COLS.map(c=>`<th style="padding:4px 4px;cursor:default">${fbox(c)}</th>`).join("")}</tr></thead><tbody id="zbody"></tbody></table><div id="zempty"></div>`;
+  const head=()=>{ $("#zhead").innerHTML=COLS.map(c=>`<th data-zk="${c.k}">${esc(c.l)}${String(ZK.st.k)===String(c.k)?(ZK.st.d>0?" ▲":" ▼"):""}</th>`).join("");
+    document.querySelectorAll("#zhead th").forEach(h=>h.onclick=()=>{ const k=h.dataset.zk; ZK.st.d=String(ZK.st.k)===k?-ZK.st.d:1; ZK.st.k=k; head(); body(); }); };
+  const body=(more)=>{ let rows=filt();
+    if(ZK.st.k!=null){ const c=COLS.find(c=>String(c.k)===String(ZK.st.k)); if(c){ const g=c.sortGet||c.get, d=ZK.st.d;
+      rows=[...rows].sort((a,b)=>{ const x=g(a), y=g(b); if(x==null||x==="") return 1; if(y==null||y==="") return -1; return (typeof x==="number"&&typeof y==="number"?x-y:String(x).localeCompare(String(y)))*d; }); } }
+    $("#zcount").textContent=`${rows.length} of ${z.rows.length}`; const total=rows.length; rows=rows.slice(0,ZK.lim);
+    $("#zbody").innerHTML=rows.map(r=>`<tr>
+      <td><span class="tk" data-tk="${esc(r[ti])}">${esc(r[ti])}</span> ${starHTML(r[ti])}</td>
+      ${z.columns.map((_,i)=>i).filter(i=>i!==ti).map(i=>`<td class="${typeof r[i]==="number"?"":"nm"}">${esc(r[i]??"")}</td>`).join("")}
+      <td>${newSet.has(r[ti])?'<span class="gold">NEW</span>':""}</td>
+      <td>${stateHTML(r[nz],r[nz+1])}</td><td>${r[nz+1]??"–"}</td><td>${r[nz+2]??"–"}</td><td class="${cls(r[nz+3])}">${pct(r[nz+3])}</td><td class="${cls(r[nz+4])}">${pct(r[nz+4],1)}</td></tr>`).join("");
+    $("#zempty").innerHTML=!total?'<div class="empty">No stocks match these filters.</div>'
+      :total>rows.length?`<div class="row" style="padding:10px;gap:10px"><span class="muted">Showing ${rows.length} of ${total} — narrow it with the filters, or</span><button id="zmore">Show all ${total}</button></div>`:"";
+    $("#zmore")&&($("#zmore").onclick=()=>{ ZK.lim=1e9; body(); }); };
+  document.querySelectorAll("#ztbl [data-cf]").forEach(el=>{ const go=()=>{ ZK.cf[el.dataset.cf]=el.value; body(); }; el.oninput=go; el.onchange=go; });
+  $("#znew").onchange=e=>{ZK.nw=e.target.checked;body();}; $("#zliq").onchange=e=>{ZK.liq=e.target.checked;body();}; $("#zq").oninput=e=>{ZK.q=e.target.value;body();};
+  $("#zclr").onclick=()=>{ ZK.cf={}; ZK.q=""; ZK.nw=false; ZK.liq=false; viewZacks(); };
+  $("#zexp").onclick=()=>saveCSV(`zacks-${z.date}.csv`,[COLS.map(c=>c.l),...filt().map(r=>COLS.map(c=>c.get(r)??""))]);
+  head(); body();
 }
 
 /* ------------------------------------------------------------------ router */
