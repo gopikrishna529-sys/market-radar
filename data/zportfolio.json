@@ -17,7 +17,10 @@
    "rank_now": 2,
    "broker_now": 1.22,
    "sector_etf": "XLV",
-   "sector": "Health Care"
+   "sector": "Health Care",
+   "vs_ema": 4.6,
+   "to_target": 14.8,
+   "chg": -2.41
   },
   {
    "ticker": "AER",
@@ -34,7 +37,10 @@
    "rank_now": 1,
    "broker_now": 1.18,
    "sector_etf": "XLY",
-   "sector": "Consumer Discretionary"
+   "sector": "Consumer Discretionary",
+   "vs_ema": 6.2,
+   "to_target": 10.6,
+   "chg": 0.72
   },
   {
    "ticker": "CDNA",
@@ -51,7 +57,10 @@
    "rank_now": 1,
    "broker_now": 1.44,
    "sector_etf": "XLV",
-   "sector": "Health Care"
+   "sector": "Health Care",
+   "vs_ema": 9.2,
+   "to_target": 24.5,
+   "chg": -2.53
   },
   {
    "ticker": "CON",
@@ -68,7 +77,10 @@
    "rank_now": 2,
    "broker_now": 1.08,
    "sector_etf": "XLV",
-   "sector": "Health Care"
+   "sector": "Health Care",
+   "vs_ema": 8.7,
+   "to_target": 10.3,
+   "chg": -0.44
   },
   {
    "ticker": "EHC",
@@ -85,7 +97,10 @@
    "rank_now": 2,
    "broker_now": 1.14,
    "sector_etf": "XLV",
-   "sector": "Health Care"
+   "sector": "Health Care",
+   "vs_ema": 5.6,
+   "to_target": 13.4,
+   "chg": 0.8
   },
   {
    "ticker": "ETON",
@@ -102,7 +117,10 @@
    "rank_now": 1,
    "broker_now": 1.33,
    "sector_etf": "XLV",
-   "sector": "Health Care"
+   "sector": "Health Care",
+   "vs_ema": 14.2,
+   "to_target": 10.2,
+   "chg": -3.32
   },
   {
    "ticker": "EXLS",
@@ -119,7 +137,10 @@
    "rank_now": 2,
    "broker_now": 1.3,
    "sector_etf": "XLY",
-   "sector": "Consumer Discretionary"
+   "sector": "Consumer Discretionary",
+   "vs_ema": 11.9,
+   "to_target": 33.5,
+   "chg": 2.87
   },
   {
    "ticker": "EXTR",
@@ -136,7 +157,10 @@
    "rank_now": 1,
    "broker_now": 1.33,
    "sector_etf": "XLC",
-   "sector": "Communication Services"
+   "sector": "Communication Services",
+   "vs_ema": 0.3,
+   "to_target": 38.5,
+   "chg": -0.74
   },
   {
    "ticker": "FA",
@@ -153,7 +177,10 @@
    "rank_now": 2,
    "broker_now": 1.82,
    "sector_etf": "XLK",
-   "sector": "Technology"
+   "sector": "Technology",
+   "vs_ema": 3.5,
+   "to_target": 28.5,
+   "chg": 2.22
   },
   {
    "ticker": "FIGS",
@@ -170,7 +197,10 @@
    "rank_now": 2,
    "broker_now": 1.91,
    "sector_etf": "XLY",
-   "sector": "Consumer Discretionary"
+   "sector": "Consumer Discretionary",
+   "vs_ema": 10.6,
+   "to_target": 10.2,
+   "chg": 1.95
   },
   {
    "ticker": "GCT",
@@ -187,7 +217,10 @@
    "rank_now": 1,
    "broker_now": 1.5,
    "sector_etf": "XLY",
-   "sector": "Consumer Discretionary"
+   "sector": "Consumer Discretionary",
+   "vs_ema": 6.1,
+   "to_target": 19.4,
+   "chg": 4.66
   },
   {
    "ticker": "GEO",
@@ -204,7 +237,10 @@
    "rank_now": 1,
    "broker_now": 1.0,
    "sector_etf": "XLY",
-   "sector": "Consumer Discretionary"
+   "sector": "Consumer Discretionary",
+   "vs_ema": 1.8,
+   "to_target": 33.0,
+   "chg": 3.2
   },
   {
    "ticker": "IRON",
@@ -221,7 +257,10 @@
    "rank_now": 2,
    "broker_now": 1.13,
    "sector_etf": "XLV",
-   "sector": "Health Care"
+   "sector": "Health Care",
+   "vs_ema": 17.0,
+   "to_target": 40.4,
+   "chg": 1.11
   },
   {
    "ticker": "KTB",
@@ -238,7 +277,10 @@
    "rank_now": 2,
    "broker_now": 1.67,
    "sector_etf": "XLI",
-   "sector": "Industrials"
+   "sector": "Industrials",
+   "vs_ema": 8.2,
+   "to_target": 16.8,
+   "chg": 0.05
   },
   {
    "ticker": "LFST",
@@ -255,7 +297,10 @@
    "rank_now": 2,
    "broker_now": 1.54,
    "sector_etf": "XLV",
-   "sector": "Health Care"
+   "sector": "Health Care",
+   "vs_ema": 9.7,
+   "to_target": 16.0,
+   "chg": 2.26
   },
   {
    "ticker": "LNG",
@@ -272,7 +317,10 @@
    "rank_now": 1,
    "broker_now": 1.25,
    "sector_etf": "XLU",
-   "sector": "Utilities"
+   "sector": "Utilities",
+   "vs_ema": 4.0,
+   "to_target": 13.2,
+   "chg": 2.02
   },
   {
    "ticker": "MCK",
@@ -289,7 +337,10 @@
    "rank_now": 2,
    "broker_now": 1.47,
    "sector_etf": "XLV",
-   "sector": "Health Care"
+   "sector": "Health Care",
+   "vs_ema": 7.5,
+   "to_target": 10.5,
+   "chg": -0.07
   },
   {
    "ticker": "MGNI",
@@ -306,7 +357,10 @@
    "rank_now": 2,
    "broker_now": 1.38,
    "sector_etf": "XLK",
-   "sector": "Technology"
+   "sector": "Technology",
+   "vs_ema": 5.1,
+   "to_target": 22.3,
+   "chg": 0.49
   },
   {
    "ticker": "ONC",
@@ -323,7 +377,10 @@
    "rank_now": 1,
    "broker_now": 1.05,
    "sector_etf": "XLV",
-   "sector": "Health Care"
+   "sector": "Health Care",
+   "vs_ema": 8.5,
+   "to_target": 10.7,
+   "chg": -0.2
   },
   {
    "ticker": "REPL",
@@ -340,7 +397,10 @@
    "rank_now": 2,
    "broker_now": 1.67,
    "sector_etf": "XLV",
-   "sector": "Health Care"
+   "sector": "Health Care",
+   "vs_ema": 26.6,
+   "to_target": 17.7,
+   "chg": -2.56
   },
   {
    "ticker": "ROIV",
@@ -357,7 +417,10 @@
    "rank_now": 2,
    "broker_now": 1.4,
    "sector_etf": "XLV",
-   "sector": "Health Care"
+   "sector": "Health Care",
+   "vs_ema": 11.6,
+   "to_target": 20.1,
+   "chg": -0.33
   },
   {
    "ticker": "SEZL",
@@ -374,7 +437,10 @@
    "rank_now": 2,
    "broker_now": 1.78,
    "sector_etf": "XLF",
-   "sector": "Financials"
+   "sector": "Financials",
+   "vs_ema": 6.3,
+   "to_target": 30.3,
+   "chg": -0.07
   },
   {
    "ticker": "TREX",
@@ -391,7 +457,10 @@
    "rank_now": 2,
    "broker_now": 1.82,
    "sector_etf": "XLB",
-   "sector": "Materials"
+   "sector": "Materials",
+   "vs_ema": 8.7,
+   "to_target": 15.4,
+   "chg": 2.95
   },
   {
    "ticker": "U",
@@ -408,7 +477,10 @@
    "rank_now": 2,
    "broker_now": 1.32,
    "sector_etf": "XLK",
-   "sector": "Technology"
+   "sector": "Technology",
+   "vs_ema": 7.8,
+   "to_target": 22.7,
+   "chg": -0.27
   }
  ],
  "blocked": [
