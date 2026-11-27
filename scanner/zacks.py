@@ -82,6 +82,46 @@ def broker_txt(x):
     return ("Strong Buy" if x < 1.5 else "Buy" if x < 2.5 else "Hold" if x < 3.5 else "Sell" if x < 4.5 else "Strong Sell")
 
 
+def rank_history(prefixes=None):
+    """Zacks Rank per ticker over every saved day, kept only where it changed:
+    {ticker: [["2026-11-26", 2], ["2026-12-03", 1], ["2026-12-09", None], ...]}
+    None = the ticker dropped out of the saved screens that day (its rank is no longer known)."""
+    if prefixes is None:
+        prefixes = _screens()[1]
+    by_day = {}                                     # date -> {prefix: {ticker: rank}}
+    for pre in prefixes:
+        for f in _files(pre):
+            z = _read(f)
+            if not z:
+                continue
+            ri = _find(z["columns"], "zacks rank", avoid=("industry",))
+            ranks = {}
+            for r in z["rows"]:
+                v = r[ri] if ri is not None and ri < len(r) else None
+                ranks[r[z["ticker_col"]]] = int(v) if isinstance(v, (int, float)) and 1 <= v <= 5 else None
+            by_day.setdefault(z["date"], {})[pre] = ranks
+    hist, last = {}, {}
+    for day in sorted(by_day):
+        screens = by_day[day]
+        today = {}
+        for ranks in screens.values():
+            for t, v in ranks.items():
+                if v is not None or t not in today:
+                    today[t] = v if v is not None else today.get(t)
+        complete = all(p in screens for p in prefixes)   # a missing file is not a drop-out
+        for t, v in today.items():
+            if v is None and t in last:
+                continue
+            if last.get(t, "x") != v:
+                hist.setdefault(t, []).append([day, v])
+                last[t] = v
+        if complete:
+            for t in [t for t in last if t not in today and last[t] is not None]:
+                hist[t].append([day, None])
+                last[t] = None
+    return hist
+
+
 def load_info():
     """Per-ticker Zacks facts merged from the newest file of every configured screen:
     {ticker: {rank, value, growth, momentum, vgm, broker, upside, target, zclose, date}}"""
@@ -111,6 +151,9 @@ def load_info():
                 v = r[i] if i < len(r) else None
                 if isinstance(v, (int, float)) and v > 0:
                     d.setdefault("levels", []).append([c, round(float(v), 2)])
+    for t, h in rank_history(prefixes).items():
+        if len(h) > 1 or t in info:
+            info.setdefault(t, {})["hist"] = h
     for t, d in info.items():
         if isinstance(d.get("rank"), (int, float)):
             d["rank"] = int(d["rank"])

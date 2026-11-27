@@ -152,16 +152,29 @@ class RChart{
     this.reset(cfg.initial||70); this.hover=null; this.my=null;
     const c=this.cv, pos=e=>{const r=c.getBoundingClientRect(); return [e.clientX-r.left,e.clientY-r.top];};
     c.addEventListener("wheel",e=>{ const [x,y]=pos(e); const pi=this.paneAt(y);
-      const zoom=e.ctrlKey||e.metaKey;                              // trackpad pinch, or Ctrl/⌘ + scroll
-      const horiz=Math.abs(e.deltaX)>Math.abs(e.deltaY), onDates=y>this.H-28;   // the date line along the bottom
-      if(!zoom&&!horiz&&!onDates) return;                           // up/down scroll over the chart: the page scrolls
+      // TradingView-style: over the chart the wheel works the chart, not the page.
+      //   mouse wheel / two-finger up-down = zoom time · pinch or Ctrl/⌘ + wheel = zoom time
+      //   two-finger sideways swipe or Shift + wheel = move back/forward in time · wheel on the price axis = zoom prices
       e.preventDefault();                                           // (also stops the Mac back-swipe over the chart)
-      if(!zoom){ if(!onDates) return;                               // sideways swipe moves the chart only on the date line
-        const dd=horiz?e.deltaX:e.deltaY, d=dd/this.plotW*(this.to-this.from); this.from+=d; this.to+=d; this.clamp(); this.draw(); return; }
-      const f=Math.exp(Math.max(-.25,Math.min(.25,e.deltaY*.008)));
+      const k=e.deltaMode===1?33:e.deltaMode===2?400:1, dx=e.deltaX*k, dy=e.deltaY*k;
+      const pinch=e.ctrlKey||e.metaKey, horiz=Math.abs(dx)>Math.abs(dy);
+      if(!pinch&&(horiz||e.shiftKey)){ const dd=horiz?dx:dy, d=dd/this.plotW*(this.to-this.from); this.from+=d; this.to+=d; this.clamp(); this.draw(); return; }
+      const f=Math.exp(Math.max(-.25,Math.min(.25,dy*(pinch?.01:.002))));
       if(x>this.plotW&&pi!=null){ this.ys[pi].s=Math.max(.05,Math.min(40,this.ys[pi].s*f)); this.draw(); return; }
-      this.zoomAt(x,f); },{passive:false});
-    c.addEventListener("pointerdown",e=>{ const [x,y]=pos(e); const pi=this.paneAt(y); c.setPointerCapture(e.pointerId);
+      const lastOn=this.to>=this.n-1;                               // like TradingView: while today's candle is on screen,
+      this.zoomAt(lastOn?this.plotW:Math.min(x,this.plotW),f); },{passive:false});   // zoom keeps it pinned at the right edge
+    // touch screens: two fingers = pinch zoom (one finger drags, as with the mouse)
+    this.pts=new Map();
+    const pinchStart=()=>{ const [a,b]=[...this.pts.values()]; const mx=(a[0]+b[0])/2;
+      this.pinch={d0:Math.max(20,Math.abs(a[0]-b[0])),f:this.from,t:this.to,mx,a:this.iOf(Math.min(mx,this.plotW))}; this.drag=null; this.axisDrag=null; };
+    c.addEventListener("pointerdown",e=>{ if(e.pointerType==="touch"){ this.pts.set(e.pointerId,pos(e)); if(this.pts.size===2){ pinchStart(); return; } } },true);
+    c.addEventListener("pointermove",e=>{ if(!this.pts.has(e.pointerId)) return; this.pts.set(e.pointerId,pos(e));
+      if(this.pinch&&this.pts.size>=2){ e.stopImmediatePropagation(); const [a,b]=[...this.pts.values()], P=this.pinch;
+        let span=(P.t-P.f)*P.d0/Math.max(20,Math.abs(a[0]-b[0])); span=Math.max(10,Math.min(this.n+40,span));
+        const r=Math.min(P.mx,this.plotW)/this.plotW; this.from=P.a-r*span; this.to=this.from+span; this.clamp(); this.draw(); } },true);
+    const ptEnd=e=>{ this.pts.delete(e.pointerId); if(this.pts.size<2) this.pinch=null; };
+    c.addEventListener("pointerup",ptEnd,true); c.addEventListener("pointercancel",ptEnd,true);
+    c.addEventListener("pointerdown",e=>{ if(this.pinch) return; const [x,y]=pos(e); const pi=this.paneAt(y); c.setPointerCapture(e.pointerId);
       if(this.meas&&this.meas.live&&this.meas.waiting){ this.meas.i1=Math.round(this.iOf(Math.min(x,this.plotW))); this.meas.v1=this.valAt(this.meas.pi,y); this.finishMeasure(); return; }
       if(x>this.plotW&&pi!=null){ this.axisDrag={pi,y,s0:this.ys[pi].s}; return; }
       if((this.measureMode||e.shiftKey)&&pi!=null){ const i=Math.round(this.iOf(x)), v=this.valAt(pi,y); this.meas={pi,i0:i,v0:v,i1:i,v1:v,live:true,sx:x,sy:y}; this.draw(); return; }
@@ -287,6 +300,14 @@ class RChart{
       y0+=ph;
     });
     g.strokeStyle="#232d39"; g.beginPath(); g.moveTo(plotW+.5,0); g.lineTo(plotW+.5,H); g.stroke();
+    { const vl=(this.cfg.vlines||[]).filter(L=>L.i>=this.from-1&&L.i<=this.to+1); let row=0, lastX=-1e9;   // e.g. Zacks Rank changes
+      for(const L of vl){ const x=Math.round(this.xOf(L.i))+.5; if(x<0||x>plotW) continue;
+        g.strokeStyle=L.color; g.lineWidth=L.width||1.6; g.setLineDash(L.dash||[]); g.globalAlpha=L.alpha||.9;
+        g.beginPath(); g.moveTo(x,0); g.lineTo(x,H-dateH); g.stroke(); g.setLineDash([]); g.globalAlpha=1; g.lineWidth=1;
+        if(!L.label) continue; g.font=`700 12px ${F}`; const tw4=g.measureText(L.label).width+12;
+        row=x-lastX<tw4+8?(row+1)%4:0; lastX=x;                    // labels close together are stacked
+        const ly=30+row*22, lx=Math.max(2,Math.min(plotW-tw4-2,x-tw4/2));
+        g.fillStyle=L.color; g.globalAlpha=.95; g.fillRect(lx,ly,tw4,19); g.globalAlpha=1; g.fillStyle="#fff"; g.textAlign="center"; g.fillText(L.label,lx+tw4/2,ly+10); } }
     const d=this.cfg.dates; g.font=`12.5px ${F}`; const step=Math.max(1,Math.ceil(100/bw)); g.fillStyle="#9aa6b4"; g.textAlign="center";
     for(let i=Math.ceil(i0/step)*step;i<=i1;i+=step){ const x=this.xOf(i); if(x<34||x>plotW-34) continue; g.fillText(fd(d[i]),x,H-dateH/2); g.strokeStyle="#141c25"; g.beginPath(); g.moveTo(Math.round(x)+.5,0); g.lineTo(Math.round(x)+.5,H-dateH); g.stroke(); }
     if(hi!=null){ const x=Math.round(this.xOf(hi))+.5; g.setLineDash([3,3]); g.strokeStyle="#7d8a99"; g.beginPath(); g.moveTo(x,0); g.lineTo(x,H-dateH); g.stroke();
@@ -612,11 +633,12 @@ async function viewChart(ticker,focus){
       ${recent.length>1?`<span class="muted">Recent:</span><div class="chips">${recent.slice(1,9).map(t=>`<span class="chip" data-tk="${esc(t)}">${esc(t)}</span>`).join("")}<span class="chip" id="rclr" title="Clear recent tickers">✕</span></div>`:""}</div>
     <div class="card" style="padding:12px 14px"><div class="info" id="cinfo"></div><div class="info zstrip" id="zstrip"></div></div>
     <div class="card" style="padding:8px" id="cvcard"><div class="row" style="padding:2px 4px 8px;gap:8px">
-        <span class="muted">Panels:</span><div class="seg" id="pnl"><button data-p="macd">MACD</button><button data-p="dmi">DMI</button><button data-p="tgt" title="Zacks price targets (from your saved screens)">🎯 Targets</button></div>
+        <span class="muted">Panels:</span><div class="seg" id="pnl"><button data-p="macd">MACD</button><button data-p="dmi">DMI</button><button data-p="tgt" title="Zacks price targets (from your saved screens)">🎯 Targets</button><button data-p="zr" title="Vertical lines where the Zacks Rank was upgraded (green) or downgraded (red)">Z Rank changes</button></div>
         <button id="fsb" style="margin-left:auto">⛶ Full screen</button></div><div id="cv"></div>
-      <div class="note" style="padding:6px 8px 2px">Drag the chart, or swipe/scroll on the date line = move · pinch, ＋/－ or Ctrl/⌘ + scroll = zoom · drag the price axis = zoom prices (any pane) · up/down scroll = scroll the page · double-click = reset to 70 candles · 📏 Measure (or Shift): drag, or click the start and click again at the end · Esc clears.<br><span style="color:#26a69a">▲ BUY</span> / <span style="color:#ef5350">▼ SHORT</span> = strategy entry (next open after the EMA trend is set) ·
+      <div class="note" style="padding:6px 8px 2px">Drag the chart, sideways swipe or Shift + scroll = move · mouse wheel, pinch or ＋/－ = zoom · scroll or drag on the price axis = zoom prices (any pane) · scroll the page from outside the chart · double-click = reset to 70 candles · 📏 Measure (or Shift): drag, or click the start and click again at the end · Esc clears.<br><span style="color:#26a69a">▲ BUY</span> / <span style="color:#ef5350">▼ SHORT</span> = strategy entry (next open after the EMA trend is set) ·
       <span class="gold">EXIT</span> = position closed, with its result · <span style="color:#7fc4ff">small ▲ under a candle</span> = close above the previous 20-day high · <span style="color:#ff8a80">small ▼ above a candle</span> = close below the previous 20-day low ·
-      green / red shading = EMA uptrend / downtrend (${EMA_TXT})</div></div>
+      green / red shading = EMA uptrend / downtrend (${EMA_TXT}) ·
+      <span style="color:#26a69a">│ Z▲</span> / <span style="color:#ef5350">│ Z▼</span> = Zacks Rank upgraded / downgraded that day (1 = Strong Buy … 5 = Strong Sell; history starts with the first saved Zacks file)</div></div>
     <div class="card"><h3>Backtest trades in ${esc(ticker)} <small>click a trade to jump to it on the chart</small></h3><div class="tbl-wrap scroll" id="ctr"><div class="loading">…</div></div></div>`;
   attachAC($("#cq"),t=>{ location.hash="#chart/"+encodeURIComponent(t); });
   $("#cf").onsubmit=e=>{e.preventDefault(); const q=$("#cq").value.trim().toUpperCase(); const hit=st.map[q]?q:(searchStocks(q,1)[0]||{}).ticker; location.hash="#chart/"+encodeURIComponent(hit||q);};
@@ -645,6 +667,7 @@ async function viewChart(ticker,focus){
     if(zi.target) levels.push({v:zi.target,color:"#9c6ade",label:lab("Avg broker target",zi.target)});
     for(const [n,v] of (zi.levels||[])) levels.push({v,color:"#7e57c2",label:lab(n.replace(/zacks\s*/i,""),v)}); }
   $("#zstrip").innerHTML=zacksStrip(zi,c.at(-1));
+  const zl=zacksLines(zi&&zi.hist,dates);
   const PANES={price:{w:3.2,title:ticker+" · D"+(zi&&zi.rank?` · Zacks #${zi.rank} ${zi.rank_txt}`:"")+(zi&&zi.broker!=null?` · Brokers ${(+zi.broker).toFixed(2)} ${zi.broker_txt}`:""),bands,markers,get refs(){ return CH.hide.tgt?[]:levels; },series:[{type:"candle",o,h,l,c,tag:true,tagColor:c.at(-1)>=o.at(-1)?"#26a69a":"#ef5350"},
       ...EP.map((p,k)=>({type:"line",name:"EMA"+p,v:t.e[p],color:EMA_COL[p]||["#00bcd4","#4c9ffe","#f5a623","#ec407a","#c77dff"][k%5],width:1.2+k*.2})),
       {type:"volume",v,o,c,overlay:true,nolegend:true}]},
@@ -655,7 +678,7 @@ async function viewChart(ticker,focus){
       {type:"line",name:"+DI",v:dm.plus,color:"#26a69a"},{type:"line",name:"−DI",v:dm.minus,color:"#ef5350"},{type:"line",name:"ADX",v:dm.adx,color:"#f5c542",width:1.8}]}};
   const build=()=>{ const keep=CH.chart?{f:CH.chart.from,t:CH.chart.to,m:CH.chart.meas,hl:CH.chart.hl}:null; if(CH.chart) CH.chart.destroy();
     const H=CH.full?window.innerHeight-70:Math.max(580,Math.min(880,window.innerHeight-220));
-    CH.chart=new RChart($("#cv"),{dates,height:H,initial:70,onMeasureEnd:()=>$("#mbtn").classList.remove("pri"),
+    CH.chart=new RChart($("#cv"),{dates,height:H,initial:70,get vlines(){ return CH.hide.zr?[]:zl; },onMeasureEnd:()=>$("#mbtn").classList.remove("pri"),
       panes:[PANES.price,...(CH.hide.macd?[]:[PANES.macd]),...(CH.hide.dmi?[]:[PANES.dmi])]});
     if(keep){ CH.chart.from=keep.f; CH.chart.to=keep.t; CH.chart.meas=keep.m&&keep.m.pi===0?keep.m:null; CH.chart.hl=keep.hl; CH.chart.draw(); }
     document.querySelectorAll("#pnl button").forEach(x=>x.classList.toggle("on",!CH.hide[x.dataset.p])); };
@@ -909,6 +932,22 @@ function zacksStrip(zi,last){
   return out.join(" ");
 }
 
+/* Zacks Rank history -> vertical lines on the chart. hist = [[YYYY-MM-DD, rank|null], ...] (change points only).
+   A rank seen before the open on a day belongs to that day's candle; if that candle isn't in the data yet,
+   the line sits just right of the last candle. */
+function zacksLines(hist,dates){
+  if(!hist||!hist.length) return [];
+  const n=dates.length, at=d=>{ let lo=0,hi=n; while(lo<hi){ const m=(lo+hi)>>1; if(dates[m]<d) lo=m+1; else hi=m; } return lo; };   // first candle on/after d
+  const out=[]; let prev=null;
+  hist.forEach(([d,r],k)=>{ const i=at(d);
+    if(k===0){ if(r) out.push({i,color:"#6b7785",dash:[3,4],width:1.2,alpha:.8,label:`Z #${r} ${RANK_TXT[r]} · tracking from ${fd(d)}`}); }
+    else if(r==null) out.push({i,color:"#6b7785",dash:[3,4],width:1.2,alpha:.8,label:`Z left screen ${fd(d)} (was #${prev})`});
+    else if(prev==null) out.push({i,color:ZCOL[r],dash:[6,4],label:`Z back in screen #${r} ${RANK_TXT[r]} ${fd(d)}`});
+    else { const up=r<prev; out.push({i,color:up?"#26a69a":"#ef5350",width:2,label:`Z${up?"▲ upgrade":"▼ downgrade"} #${prev}→#${r} ${RANK_TXT[r]} · ${fd(d)}`}); }
+    prev=r; });
+  return out;
+}
+const RANK_TXT={1:"Strong Buy",2:"Buy",3:"Hold",4:"Sell",5:"Strong Sell"};
 const ZK={trend:"",nw:false,liq:false,q:"",st:{k:null,d:1}};
 async function viewZacks(){
   let z; try{ z=await J("data/zacks.json"); }catch(e){ z=null; }
