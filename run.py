@@ -16,6 +16,7 @@ from scanner.massive import Massive
 from scanner.report import fmt_date, send_email
 from scanner.scan import run_scan
 from scanner import zportfolio
+from scanner.holdings import update_holdings
 
 
 def main():
@@ -29,6 +30,10 @@ def main():
     if not added and not force and not site_only:
         print("No new trading day - nothing to do.")
         return
+    try:
+        update_holdings()                           # S&P 500 / Nasdaq 100 / sector ETF members (once a day)
+    except Exception as e:
+        print(f"holdings: skipped ({e})")
     if site_only:                                   # new Zacks file, same prices: refresh the website only
         w = load_panel()
         ind = compute(w)

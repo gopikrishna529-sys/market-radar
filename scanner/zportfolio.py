@@ -22,6 +22,7 @@ from .config import CONFIG
 from .indicators import rs_rating
 from .scan import scan_universe
 from .zacks import load_info
+from .holdings import sector_of
 
 ROOT = Path(__file__).resolve().parent.parent
 STATE = ROOT / "data" / "zportfolio.json"
@@ -155,6 +156,18 @@ def update(w, ind):
                     n_open += 1
         st["daily"] = [x for x in st.get("daily", []) if x[0] != d] + [[d, round(float(tot), 2), n_open]]
         st["last_day"] = d
+    # sector of every position (SPDR sector fund it belongs to)
+    try:
+        from .profiles import load_profiles
+        pr = load_profiles()
+        sec = sector_of(dict(zip(pr["ticker"], pr["sector"])))
+    except Exception as e:
+        print(f"zacks portfolio: no sectors ({e})")
+        sec = {}
+    names = CONFIG.get("sectors") or {}
+    for p in pos:
+        e = sec.get(p["ticker"])
+        p["sector_etf"], p["sector"] = (e, names.get(e, e)) if e else (None, None)
     # mark-to-market for the website
     for p in pos:
         if p["status"] in ("open", "exit next open", "pending"):

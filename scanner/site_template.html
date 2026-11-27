@@ -130,6 +130,7 @@ table.trades tbody tr{cursor:pointer} tr.sel td{background:#1d2a3a!important}
 
 <script>
 const EMA = __EMA__;
+const SECTOR_ETFS = __SECTORS__, INDUSTRY_ETFS = __INDUSTRIES__;
 const REPO = "__REPO__";   // owner/repo, used to read the saved daily market files
 /* ------------------------------------------------------------------ utilities */
 const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -654,7 +655,13 @@ async function wlItems(src){
       v:p.pnl, vl:p.pnl==null?(p.status==="pending"?"order":"–"):pct(p.pnl,1), tip:`${p.status==="pending"?"Buy next open":p.status==="closed"?"Closed "+fd(p.exit_date):"Bought "+fd(p.entry_date)}`}));
   }
   let list=[];
-  if(src==="wl"){ const w=WL.load(); list=w.lists[w.active]||[]; }
+  if(src.startsWith("etf:")){ const etf=src.slice(4); let E={}; try{ E=await (CH.etfs ||= J("data/etfs.json")); }catch(e){}
+    const e=E[etf]||{}; let tk=e.tickers;
+    if(!tk||!tk.length){ const g=((await J("data/stocks.json")).groups||{})[etf];      // no holdings file: match on sector / industry
+      tk=g?Object.values(st.map).filter(r=>r.type!=="ETF"&&(g.sector?(r.sector||"")===g.sector:(g.industry||[]).some(w=>(r.industry||"").toLowerCase().includes(w)))).map(r=>r.ticker).sort():[]; }
+    CH.wlSrcInfo=e.date&&e.tickers&&e.tickers.length?`${e.source} holdings ${fd(e.date)}`:"approx. by sector / industry";
+    list=[etf,...tk.filter(t=>st.map[t]&&t!==etf)]; }
+  else if(src==="wl"){ const w=WL.load(); list=w.lists[w.active]||[]; }
   else if(src==="recent"){ try{ list=JSON.parse(localStorage.getItem("mr_recent")||"[]"); }catch(e){} }
   else if(src==="zr1"){ try{ const ZI=await (CH.zi ||= J("data/zinfo.json")); list=Object.keys(ZI).filter(t=>ZI[t].rank===1&&st.map[t]).sort(); }catch(e){} }
   return list.map(t=>({t,name:S(t).name,px:S(t).close,v:S(t).chg,vl:pct(S(t).chg,2),tip:""}));
@@ -667,21 +674,31 @@ async function renderWLP(cur){
   const wl=WL.load();
   box.innerHTML=`<div class="hd"><select id="wls">
       <optgroup label="Portfolio"><option value="pf">Open positions + buy orders</option><option value="pfo">Open positions</option><option value="pfp">Buy orders (next open)</option><option value="pfc">Closed positions</option></optgroup>
-      <optgroup label="Lists"><option value="wl">Watchlist: ${esc(wl.active)}</option><option value="zr1">Zacks Rank #1 (charted)</option><option value="recent">Recently viewed</option></optgroup></select>
+      <optgroup label="Lists"><option value="wl">Watchlist: ${esc(wl.active)}</option><option value="zr1">Zacks Rank #1 (charted)</option><option value="recent">Recently viewed</option></optgroup>
+      <optgroup label="Indexes"><option value="etf:SPY">S&amp;P 500 (SPY)</option><option value="etf:QQQ">Nasdaq 100 (QQQ)</option><option value="etf:DIA">Dow Jones 30 (DIA)</option></optgroup>
+      <optgroup label="Sectors">${Object.entries(SECTOR_ETFS).sort((a,b)=>a[1].localeCompare(b[1])).map(([k,n])=>`<option value="etf:${k}">${esc(n)} (${k})</option>`).join("")}</optgroup>
+      <optgroup label="Industries">${Object.entries(INDUSTRY_ETFS).sort((a,b)=>a[1].localeCompare(b[1])).map(([k,n])=>`<option value="etf:${k}">${esc(n)} (${k})</option>`).join("")}</optgroup></select>
+    <select id="wlo" title="Sort the list"><option value="">Sort: A → Z</option><option value="chg">Sort: today % (best first)</option><option value="m1">Sort: 1 month % (best first)</option><option value="rs">Sort: RS rating (best first)</option><option value="v">Sort: P&amp;L / list % (best first)</option></select>
     ${isPf?`<select id="wld"><option value="">Any entry date</option>${days.map(d=>`<option value="${d}" ${W.day===d?"selected":""}>Entry ${fd(d)}</option>`).join("")}</select>`:""}
     <input id="wlq" placeholder="Filter" value="${esc(W.q)}" autocomplete="off"></div>
     <div class="lb" id="wlb" tabindex="0"></div><div class="ft" id="wlf"></div>`;
-  $("#wls").value=W.src;
-  const items=(await wlItems(W.src)).filter(x=>matchQ(W.q,x.t,x.name));
+  $("#wls").value=W.src; $("#wlo").value=W.sort||"";
+  const st2=await stocks(); let items=(await wlItems(W.src)).filter(x=>matchQ(W.q,x.t,x.name));
+  if(W.sort){ const S2=st2.map, val=x=>W.sort==="chg"?(S2[x.t]||{}).chg:W.sort==="m1"?(S2[x.t]||{}).perf_1m:W.sort==="rs"?(S2[x.t]||{}).rs:x.v;
+    const isE=W.src.startsWith("etf:"), head=isE?items.slice(0,1):[], rest=isE?items.slice(1):items;
+    items=head.concat(rest.sort((a,b)=>(val(b)??-1e9)-(val(a)??-1e9))); }
   CH.wlList=items.map(x=>x.t);
   $("#wlb").innerHTML=items.length?items.map(x=>`<div class="it ${x.t===cur?"on":""}" data-go="${esc(x.t)}" title="${esc(x.tip||x.name||"")}"><div><b>${esc(x.t)}</b><span class="nm3">${esc(x.name||"")}</span></div>
       <span class="r">${x.px!=null?fmtPx(x.px):"–"}</span><span class="r ${cls(x.v)}">${x.vl}</span></div>`).join("")
     :`<div class="empty" style="padding:20px">${W.src==="wl"?"Your watchlist is empty — use “+ Watch” next to a ticker.":"Nothing in this list."}</div>`;
-  $("#wlf").textContent=`${items.length} ticker${items.length===1?"":"s"} · ↑ ↓ keys move through the list${isPf?" · % = P&L":" · % = today"}`;
+  const isE=W.src.startsWith("etf:"), nI=isE?items.length-1:items.length;
+  $("#wlf").textContent=`${nI} stock${nI===1?"":"s"}${isE?" · "+CH.wlSrcInfo:""} · ↑ ↓ keys move through the list${isPf?" · % = P&L":" · % = today"}`;
   const lb=$("#wlb"); lb.scrollTop=W.scroll||0; const on=lb.querySelector(".it.on"); if(on){ const r=on.offsetTop, h=lb.clientHeight; if(r<lb.scrollTop||r>lb.scrollTop+h-40) lb.scrollTop=r-h/2; }
   lb.onclick=e=>{ const it=e.target.closest("[data-go]"); if(it){ W.scroll=lb.scrollTop; location.hash="#chart/"+encodeURIComponent(it.dataset.go); } };
-  $("#wls").onchange=e=>{ W.src=e.target.value; W.day=""; W.scroll=0; try{localStorage.setItem("mr_wlsrc",W.src);}catch(_){ } renderWLP(cur); };
-  $("#wld")&&($("#wld").onchange=e=>{ W.day=e.target.value; W.scroll=0; renderWLP(cur); });
+  const fl=()=>$("#wlb")&&$("#wlb").focus();
+  $("#wlo").onchange=e=>{ W.sort=e.target.value; W.scroll=0; renderWLP(cur).then(fl); };
+  $("#wls").onchange=e=>{ W.src=e.target.value; W.day=""; W.scroll=0; try{localStorage.setItem("mr_wlsrc",W.src);}catch(_){ } renderWLP(cur).then(fl); };
+  $("#wld")&&($("#wld").onchange=e=>{ W.day=e.target.value; W.scroll=0; renderWLP(cur).then(fl); });
   $("#wlq").oninput=e=>{ W.q=e.target.value; const keep=e.target.selectionStart; W.scroll=0; renderWLP(cur).then(()=>{ const q=$("#wlq"); q.focus(); q.setSelectionRange(keep,keep); }); };
 }
 document.addEventListener("keydown",e=>{                     // ↑ / ↓ step through the side list (like TradingView)

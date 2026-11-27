@@ -100,7 +100,10 @@ def run_scan(w, ind):
 
     result = {
         "date": date.strftime("%Y-%m-%d"),
-        "benchmark": {"ticker": bench, "close": _rnd(spy.iloc[-1]), "chg": _rnd(spy_chg)},
+        "benchmark": {"ticker": bench, "close": _rnd(spy.iloc[-1]), "chg": _rnd(spy_chg),
+                      "perf_1w": _rnd(_pct(spy.iloc[-1], spy.iloc[-6]), 1) if len(spy) > 6 else None,
+                      "perf_1m": _rnd(_pct(spy.iloc[-1], spy.iloc[-22]), 1) if len(spy) > 22 else None,
+                      "perf_3m": _rnd(_pct(spy.iloc[-1], spy.iloc[-64]), 1) if len(spy) > 64 else None},
         "universe_size": int(len(uni)),
         "trend": trend_list,
         "breakouts": breakout_list,

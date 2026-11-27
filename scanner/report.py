@@ -103,12 +103,33 @@ def build_email(result, bt=None, zp=None):
     def usd(x):
         return f'<span style="color:{_color(x)}">{"-" if x < 0 else ""}${abs(x):,.0f}</span>'
 
-    def table(head, rows):
+    def table(head, rows, tint=None):
         if not rows:
             return '<p style="color:#666;margin:4px 0 14px">None.</p>'
+        tint = tint or [""] * len(rows)
         return (f'<table cellspacing="0" style="border-collapse:collapse;width:100%;margin-bottom:12px"><tr>'
                 + "".join(f"<th {th}>{h}</th>" for h in head) + "</tr>"
-                + "".join("<tr>" + "".join(f"<td {td}>{c}</td>" for c in row) + "</tr>" for row in rows) + "</table>")
+                + "".join(f'<tr style="background:{bg}">' + "".join(f"<td {td}>{c}</td>" for c in row) + "</tr>"
+                          for row, bg in zip(rows, tint)) + "</table>")
+
+    sec = {r["ticker"]: r for r in result.get("sectors") or []}
+    nsec = len(sec)
+
+    def srank(p):
+        r = sec.get(p.get("sector_etf"))
+        return r["rank"] if r else 99
+
+    def tint(p):
+        k = srank(p)
+        return "#e3f6e8" if k <= 2 else "#fdecea" if nsec and nsec - 1 <= k <= nsec else ""
+
+    def sec_cell(p):
+        r = sec.get(p.get("sector_etf"))
+        if not r:
+            return '<span style="color:#999">–</span>'
+        tag = (' <b style="color:#0a7d38">▲ top</b>' if r["rank"] <= 2 else
+               ' <b style="color:#c62828">▼ weak</b>' if r["rank"] >= nsec - 1 else "")
+        return f'{escape(r["name"])} <span style="color:#888">#{r["rank"]}</span>{tag}'
 
     def fd(x):
         return fmt_date(x) if x else "–"
@@ -124,9 +145,14 @@ def build_email(result, bt=None, zp=None):
         f'closed P&amp;L {usd(rpl)} from {len(closed)} trades ({wins} winners) · total {usd(upl + rpl)} '
         f'on ${D:,.0f} per position · tracking since {fd(zp.get("start"))}</p>',
         f'<p style="margin:0 0 8px"><a href="{site}#portfolio">Open the portfolio on the website →</a></p>' if site else "",
-        f'<h2 {h2}>🟢 Buy at the next open ({len(buys)})</h2>',
-        table(["Ticker", "Zacks Rank", "Brokers", "Price target", "Upside", "RS", "Close"],
-              [[tk(p), p["rank"], px(p["broker"]), px(p["target"]), pc(p["upside"]), p["rs"], px(p["signal_close"])] for p in buys]),
+        _market_section(result, P, buys, opn, h2, th, td),
+        f'<h2 {h2}>🟢 Buy at the next open ({len(buys)})</h2>'
+        + '<p style="margin:0 0 6px;font-size:12px;color:#555">Sorted by sector strength: '
+          '<span style="background:#e3f6e8;padding:1px 6px">green = top-2 sector</span> first, '
+          '<span style="background:#fdecea;padding:1px 6px">red = bottom-2 sector</span> last.</p>',
+        table(["Ticker", "Sector", "Zacks Rank", "Brokers", "Price target", "Upside", "RS", "Close"],
+              [[tk(p), sec_cell(p), p["rank"], px(p["broker"]), px(p["target"]), pc(p["upside"]), p["rs"], px(p["signal_close"])]
+               for p in sorted(buys, key=lambda p: (srank(p), -(p.get("upside") or 0)))], tint=[tint(p) for p in sorted(buys, key=lambda p: (srank(p), -(p.get("upside") or 0)))]),
         f'<h2 {h2}>🔴 Sell at the next open ({len(sells)})</h2>',
         table(["Ticker", "Bought", "Entry", "Last", "P&amp;L", "Why"],
               [[tk(p), fd(p.get("entry_date")), px(p.get("entry")), px(p.get("last")), pc(p.get("pnl")), escape(p.get("reason", ""))] for p in sells]),
@@ -140,10 +166,11 @@ def build_email(result, bt=None, zp=None):
         return f"{a}" if b is None or b == a else f'<span style="color:{"#0a7d38" if b < a else "#c62828"}">{a}→{b}</span>'
     parts += [
         f'<h2 {h2}>📈 Open positions ({len(opn)})</h2>',
-        table(["Ticker", "Bought", "Entry", "Last", "P&amp;L", "Days", "Rank", "Brokers", "Target"],
-              [[tk(p) + (" ⚠️ sell next open" if p["status"] == "exit next open" else ""), fd(p.get("entry_date")),
+        table(["Ticker", "Sector", "Bought", "Entry", "Last", "P&amp;L", "Days", "Rank", "Brokers", "Target"],
+              [[tk(p) + (" ⚠️ sell next open" if p["status"] == "exit next open" else ""), sec_cell(p), fd(p.get("entry_date")),
                 px(p.get("entry")), px(p.get("last")), pc(p.get("pnl")), p.get("days", 0),
-                rk(p.get("rank"), p.get("rank_now")), rk(p.get("broker"), p.get("broker_now")), px(p.get("target"))] for p in opn]),
+                rk(p.get("rank"), p.get("rank_now")), rk(p.get("broker"), p.get("broker_now")), px(p.get("target"))] for p in opn],
+              tint=[tint(p) for p in opn]),
         f'<h2 {h2}>📕 Recently closed</h2>',
         table(["Ticker", "Bought", "Sold", "P&amp;L", "Days", "Why"],
               [[tk(p), fd(p.get("entry_date")), fd(p.get("exit_date")), pc(p.get("pnl")), p.get("days", "–"),
@@ -157,6 +184,94 @@ def build_email(result, bt=None, zp=None):
     subject = (f"Market Radar {day}: {len(buys)} buy, {len(sells)} sell · {len(opn)} open "
                f"({_fmt(avg, '%') if avg is not None else '–'})")
     return subject, "".join(parts)
+
+
+def _market_section(result, P, buys, opn, h2, th, td):
+    """Market tone + sector leaderboard + plain-English insights for the portfolio."""
+    S = result.get("sectors") or []
+    if not S:
+        return ""
+    n = len(S)
+    b = result.get("benchmark") or {}
+    br = result.get("breadth") or {}
+
+    def pc(x, d=1):
+        if x is None:
+            return "–"
+        return f'<span style="color:{_color(x)}">{x:+.{d}f}%</span>'
+    pit = br.get("pct_in_trend") or 0
+    p200 = br.get("pct_above_ema200") or 0
+    tone = ("🟢 <b>healthy</b> — most stocks are in uptrends" if p200 >= 60 else
+            "🟡 <b>mixed</b> — be selective, favour the strongest sectors" if p200 >= 40 else
+            "🔴 <b>weak</b> — most stocks are below their EMA200; keep new buys small")
+    top, bot = S[:2], S[-2:][::-1]
+    by = {}
+    for p in P:
+        by.setdefault(p.get("sector_etf"), []).append(p)
+    bt = lambda L: ", ".join(f'<b>{escape(p["ticker"])}</b>' for p in L)
+    ins = []
+    ins.append(f'<b>Strongest sectors:</b> {" and ".join(f"{escape(r["name"])} ({r["ticker"]}) {pc(r["rel_1m"])}" for r in top)} vs SPY over the last month.')
+    ins.append(f'<b>Weakest sectors:</b> {" and ".join(f"{escape(r["name"])} ({r["ticker"]}) {pc(r["rel_1m"])}" for r in bot)} — money is leaving these.')
+    imp = [r for r in S if r["quadrant"] == "Improving"]
+    if imp:
+        ins.append("<b>Watch for opportunities:</b> " + ", ".join(escape(r["name"]) for r in imp)
+                   + " — still behind SPY but momentum is turning up (often the next leaders).")
+    wk = [r for r in S if r["quadrant"] == "Weakening"]
+    if wk:
+        ins.append("<b>Losing steam:</b> " + ", ".join(escape(r["name"]) for r in wk)
+                   + " — still ahead of SPY but slowing; tighten stops on positions there.")
+    mv = sorted([r for r in S if abs(r.get("rank_change") or 0) >= 3], key=lambda r: -abs(r["rank_change"]))
+    if mv:
+        ins.append("<b>Big moves in the ranking this week:</b> " + ", ".join(
+            f'{escape(r["name"])} {"▲" if r["rank_change"] > 0 else "▼"}{abs(r["rank_change"])} places' for r in mv[:3]) + ".")
+    tk_top = [p for p in buys if p.get("sector_etf") in {r["ticker"] for r in top}]
+    tk_bot = [p for p in buys if p.get("sector_etf") in {r["ticker"] for r in bot}]
+    if buys:
+        if tk_top:
+            ins.append(f'<b>Best-aligned buys</b> (strong stock + strong sector): {bt(tk_top)}.')
+        if tk_bot:
+            ins.append(f'<b>Against the tide</b> (buy signal but weak sector — consider a smaller size): {bt(tk_bot)}.')
+        cb = {}
+        for p in buys:
+            cb[p.get("sector") or "Other"] = cb.get(p.get("sector") or "Other", 0) + 1
+        bigb = max(cb.items(), key=lambda kv: kv[1])
+        if len(buys) >= 5 and bigb[1] / len(buys) >= 0.35:
+            ins.append(f'<b>Today\'s buys are bunched:</b> {bigb[1]} of {len(buys)} are in {escape(bigb[0])} — '
+                       'one bad day for that sector would hit many positions at once.')
+    if opn:
+        cnt = {}
+        for p in opn:
+            cnt[p.get("sector") or "Other"] = cnt.get(p.get("sector") or "Other", 0) + 1
+        big = max(cnt.items(), key=lambda kv: kv[1])
+        if big[1] / len(opn) >= 0.3 and len(opn) >= 4:
+            ins.append(f'<b>Concentration:</b> {big[1]} of {len(opn)} open positions ({big[1] / len(opn):.0%}) are in {escape(big[0])}.')
+        wp = [p for p in opn if p.get("pnl") is not None]
+        if wp:
+            bst, wst = max(wp, key=lambda p: p["pnl"]), min(wp, key=lambda p: p["pnl"])
+            ins.append(f'<b>Best open position:</b> {escape(bst["ticker"])} {pc(bst["pnl"])} · <b>worst:</b> {escape(wst["ticker"])} {pc(wst["pnl"])}.')
+        dn = [p for p in opn if isinstance(p.get("rank_now"), int) and isinstance(p.get("rank"), int) and p["rank_now"] > p["rank"]]
+        if dn:
+            ins.append(f'<b>Zacks downgrades since you bought:</b> {bt(dn)} — keep an eye on them (sold automatically at Rank {4}+).')
+    rows = []
+    for r in S:
+        k = r["rank"]
+        bg = "#e3f6e8" if k <= 2 else "#fdecea" if k >= n - 1 else ""
+        ch = r.get("rank_change") or 0
+        chs = f'<span style="color:{"#0a7d38" if ch > 0 else "#c62828"}">{"▲" if ch > 0 else "▼"}{abs(ch)}</span>' if ch else ""
+        held = len([p for p in by.get(r["ticker"], []) if p["status"] in ("open", "exit next open", "pending")])
+        rows.append(f'<tr style="background:{bg}"><td {td}><b>#{k}</b> {chs}</td><td {td}>{escape(r["name"])} <span style="color:#888">{r["ticker"]}</span></td>'
+                    f'<td {td}>{pc(r["rel_1w"])}</td><td {td}><b>{pc(r["rel_1m"])}</b></td><td {td}>{pc(r["rel_3m"])}</td>'
+                    f'<td {td}>{escape(r["quadrant"])}</td><td {td}>{held or ""}</td></tr>')
+    return (f'<h2 {h2}>🧭 Market &amp; sectors</h2>'
+            f'<p style="margin:0 0 6px">SPY {pc(b.get("chg"), 2)} today · {pc(b.get("perf_1w"))} 1 week · {pc(b.get("perf_1m"))} 1 month · '
+            f'{p200:.0f}% of stocks above EMA200 · {pit:.0f}% in a full EMA uptrend → market is {tone}.</p>'
+            '<ul style="margin:6px 0 10px;padding-left:20px;line-height:1.55">' + "".join(f"<li>{x}</li>" for x in ins) + "</ul>"
+            f'<table cellspacing="0" style="border-collapse:collapse;width:100%;margin-bottom:6px"><tr>'
+            + "".join(f"<th {th}>{h}</th>" for h in ("Rank", "Sector", "1W vs SPY", "1M vs SPY", "3M vs SPY", "Rotation", "Ours (open + orders)"))
+            + "</tr>" + "".join(rows) + "</table>"
+            '<p style="margin:0 0 10px;font-size:11px;color:#888">Ranked by 1-month performance against SPY. Rotation: Leading = strong and '
+            'getting stronger · Weakening = strong but slowing · Improving = weak but picking up · Lagging = weak and getting weaker. '
+            '▲▼ = places moved since a week ago.</p>')
 
 
 def _zacks_section(result, h2, lim):

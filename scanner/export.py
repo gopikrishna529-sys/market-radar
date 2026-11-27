@@ -115,6 +115,11 @@ def build_site(w, ind):
     from .zacks import load_info, load_latest
     zi = load_info()
     (data / "zinfo.json").write_text(jsonsafe.dumps(zi, separators=(",", ":")))
+    from .holdings import load_holdings, funds              # index / sector ETF members for the chart's side list
+    h = load_holdings()
+    (data / "etfs.json").write_text(jsonsafe.dumps(
+        {etf: {"name": name, "tickers": (h.get(etf) or {}).get("tickers"), "date": (h.get(etf) or {}).get("date"),
+               "source": (h.get(etf) or {}).get("source")} for etf, name in funds().items()}, separators=(",", ":")))
     zp = ROOT / "data" / "zportfolio.json"                  # Zacks portfolio (tracked forward, see zportfolio.py)
     if zp.exists():
         (data / "zportfolio.json").write_text(zp.read_text())
@@ -137,6 +142,8 @@ def build_site(w, ind):
 
     html = TEMPLATE.read_text().replace("__TITLE__", CONFIG["report"]["site_title"])
     html = html.replace("__EMA__", jsonsafe.dumps(CONFIG["ema"]))
+    html = html.replace("__SECTORS__", jsonsafe.dumps(CONFIG.get("sectors") or {}))
+    html = html.replace("__INDUSTRIES__", jsonsafe.dumps(CONFIG.get("industries") or {}))
     html = html.replace("__REPO__", os.environ.get("GITHUB_REPOSITORY", ""))
     (SITE / "index.html").write_text(html)
     (SITE / ".nojekyll").write_text("")
