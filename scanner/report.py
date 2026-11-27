@@ -174,7 +174,7 @@ def _zport_section(zp, h2, site):
             f'{len(opn)} open (average <span style="color:{_color(avg)}">{_fmt(avg, "%")}</span>) · '
             f'{len(closed)} closed, {wins} winners · rules: Zacks Rank ≤ {r.get("max_rank")}, brokers &lt; {r.get("max_broker")}, '
             f'target ≥ +{r.get("min_upside_pct")}%, EMA uptrend, RS ≥ {r.get("min_rs")}'
-            + (f' · <a href="{site}#zpf">details</a>' if site else "") + "</p>")
+            + (f' · <a href="{site}#portfolio">details</a>' if site else "") + "</p>")
 
 
 def _strategy_section(bt, h2, site):
@@ -194,7 +194,7 @@ def _strategy_section(bt, h2, site):
                          f'<span style="color:{_color(r["pnl"])}">{_fmt(r["pnl"], "%")}</span>)'
                          for r in exits[:30]) or "none"
     since = fmt_date(m["dates"][0]) if m.get("dates") else "–"
-    return (f'<h2 {h2}>📋 Strategy — orders for the next open</h2>'
+    return (f'<h2 {h2}>📋 Old EMA strategy (backtest only) — signals for the next open</h2>'
             f'<p style="margin:2px 0">Buy (EMA trend just set, strongest RS first): {names(longs)}</p>'
             f'<p style="margin:2px 0">Short (EMA downtrend just set): {names(shorts)}</p>'
             f'<p style="margin:2px 0 8px">Close portfolio positions (closed beyond EMA50 today): {exit_txt}</p>'
@@ -202,7 +202,7 @@ def _strategy_section(bt, h2, site):
             f'<b style="color:{_color(st.get("total"))}">{_fmt(st.get("total"), "%")}</b> vs SPY '
             f'{_fmt(sp.get("total"), "%")} · max drawdown {_fmt(st.get("max_dd"), "%")} · '
             f'win rate {m.get("trade_stats", {}).get("win_rate", "–")}%'
-            + (f' · <a href="{site}#portfolio">details</a>' if site else "") + "</p>")
+            + (f' · <a href="{site}#backtest">details</a>' if site else "") + "</p>")
 
 
 def send_email(result, bt=None, zp=None):
