@@ -76,52 +76,86 @@ def _sector_table(rows):
 
 
 def build_email(result, bt=None, zp=None):
-    lim = CONFIG["report"]["max_rows_email"]
-    b = result["benchmark"]
+    """Daily email: the Zacks portfolio only (orders for the next open, open positions, closed trades)."""
     site = os.environ.get("SITE_URL", "")
+    day = fmt_date(result["date"])
     h2 = 'style="font-size:16px;margin:22px 0 6px;border-left:4px solid #1565c0;padding-left:8px"'
-    rotating_in = [r for r in result["sectors"] + result["industries"] if r["quadrant"] == "Improving"]
+    th = 'style="text-align:left;padding:6px 8px;border-bottom:2px solid #ddd;font-size:12px;color:#555"'
+    td = 'style="padding:5px 8px;border-bottom:1px solid #eee;font-size:13px"'
+    zp = zp or {}
+    P = zp.get("positions", [])
+    last = zp.get("last_day")
+    r = zp.get("rules", {})
+    D = r.get("dollars_per_trade", 10000)
+    buys = [p for p in P if p["status"] == "pending" and p.get("signal_date") == last]
+    sells = [p for p in P if p["status"] == "exit next open" and p.get("exit_signal") == last]
+    opn = sorted([p for p in P if p["status"] in ("open", "exit next open")], key=lambda p: -(p.get("pnl") or 0))
+    closed = sorted([p for p in P if p["status"] == "closed"], key=lambda p: p.get("exit_date", ""), reverse=True)
+    sold_today = [p for p in closed if p.get("exit_date") == last]
+    upl = sum((p.get("pnl") or 0) / 100 * D for p in opn)
+    rpl = sum((p.get("pnl") or 0) / 100 * D for p in closed)
+    avg = sum(p.get("pnl") or 0 for p in opn) / len(opn) if opn else None
+    wins = sum(1 for p in closed if (p.get("pnl") or 0) > 0)
+
+    def pc(x):
+        return f'<span style="color:{_color(x)}">{_fmt(x, "%")}</span>'
+
+    def usd(x):
+        return f'<span style="color:{_color(x)}">{"-" if x < 0 else ""}${abs(x):,.0f}</span>'
+
+    def table(head, rows):
+        if not rows:
+            return '<p style="color:#666;margin:4px 0 14px">None.</p>'
+        return (f'<table cellspacing="0" style="border-collapse:collapse;width:100%;margin-bottom:12px"><tr>'
+                + "".join(f"<th {th}>{h}</th>" for h in head) + "</tr>"
+                + "".join("<tr>" + "".join(f"<td {td}>{c}</td>" for c in row) + "</tr>" for row in rows) + "</table>")
+
+    def fd(x):
+        return fmt_date(x) if x else "–"
+
+    def px(x):
+        return "–" if x is None else f"{x:,.2f}"
+
+    tk = lambda p: f'<b>{escape(p["ticker"])}</b>'
     parts = [
         '<div style="font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:820px;color:#222">',
-        f'<h1 style="font-size:20px;margin:0 0 4px">Market Radar — {fmt_date(result["date"])}</h1>',
-        f'<p style="margin:0 0 4px;color:#444">{b["ticker"]} {b["close"]} '
-        f'<span style="color:{_color(b["chg"])}">{_fmt(b["chg"], "%")}</span> · '
-        f'{result["universe_size"]} stocks scanned · {result["breadth"]["pct_in_trend"]}% in EMA trend · '
-        f'{result["breadth"]["pct_above_ema200"]}% above 200 EMA</p>',
-        f'<p style="margin:0 0 8px"><a href="{site}">Open the full website →</a></p>' if site else "",
-        _zport_section(zp, h2, site),
-        _strategy_section(bt, h2, site),
-        _zacks_section(result, h2, lim),
-        f'<h2 {h2}>🚀 EMA trend + {CONFIG["breakout"]["lookback_days"]}-day breakout ({len(result["breakouts"])})</h2>',
-        _stock_table(result["breakouts"], lim),
-        f'<h2 {h2}>🔻 EMA downtrend + {CONFIG["breakout"]["lookback_days"]}-day breakdown ({len(result.get("breakdowns", []))}, weakest RS first)</h2>',
-        _stock_table(result.get("breakdowns", []), lim),
+        f'<h1 style="font-size:20px;margin:0 0 4px">Market Radar portfolio — {day}</h1>',
+        f'<p style="margin:0 0 4px;color:#444">{len(opn)} open positions · open P&amp;L {usd(upl)} (average {pc(avg)}) · '
+        f'closed P&amp;L {usd(rpl)} from {len(closed)} trades ({wins} winners) · total {usd(upl + rpl)} '
+        f'on ${D:,.0f} per position · tracking since {fd(zp.get("start"))}</p>',
+        f'<p style="margin:0 0 8px"><a href="{site}#portfolio">Open the portfolio on the website →</a></p>' if site else "",
+        f'<h2 {h2}>🟢 Buy at the next open ({len(buys)})</h2>',
+        table(["Ticker", "Zacks Rank", "Brokers", "Price target", "Upside", "RS", "Close"],
+              [[tk(p), p["rank"], px(p["broker"]), px(p["target"]), pc(p["upside"]), p["rs"], px(p["signal_close"])] for p in buys]),
+        f'<h2 {h2}>🔴 Sell at the next open ({len(sells)})</h2>',
+        table(["Ticker", "Bought", "Entry", "Last", "P&amp;L", "Why"],
+              [[tk(p), fd(p.get("entry_date")), px(p.get("entry")), px(p.get("last")), pc(p.get("pnl")), escape(p.get("reason", ""))] for p in sells]),
     ]
-    if b["chg"] is not None and b["chg"] < 0:
-        parts += [f'<h2 {h2}>💪 Up while SPY was down ({len(result["rs_days"])})</h2>',
-                  _stock_table(result["rs_days"], lim)]
-    else:
-        parts += [f'<h2 {h2}>💪 Up while SPY was down</h2>',
-                  '<p style="color:#666;margin:4px 0 16px">SPY was not down today.</p>']
+    if sold_today:
+        parts += [f'<h2 {h2}>✅ Sold at today\u2019s open ({len(sold_today)})</h2>',
+                  table(["Ticker", "Bought", "Entry", "Exit", "P&amp;L", "Why"],
+                        [[tk(p), fd(p.get("entry_date")), px(p.get("entry")), px(p.get("exit")), pc(p.get("pnl")), escape(p.get("reason", ""))] for p in sold_today])]
+
+    def rk(a, b):
+        return f"{a}" if b is None or b == a else f'<span style="color:{"#0a7d38" if b < a else "#c62828"}">{a}→{b}</span>'
     parts += [
-        f'<h2 {h2}>⭐ RS leaders — RS rating ≥ {CONFIG["relative_strength"]["leaders_min_rating"]} '
-        f'and RS line at 50-day high ({len(result["rs_leaders"])})</h2>',
-        _stock_table(result["rs_leaders"], lim),
-        f'<h2 {h2}>🔄 Sector rotation</h2>',
-        ('<p style="margin:0 0 6px">Rotating in (Improving): <b>'
-         + ", ".join(f'{r["ticker"]} {escape(r["name"])}' for r in rotating_in) + "</b></p>") if rotating_in else "",
-        _sector_table(result["sectors"]),
-        f'<h2 {h2}>🏭 Industry groups</h2>',
-        _sector_table(result["industries"]),
-        f'<h2 {h2}>📈 In EMA trend ({len(result["trend"])}, top {lim} by RS)</h2>',
-        _stock_table(result["trend"], lim),
-        '<p style="font-size:11px;color:#888;margin-top:20px">★ = RS line at a 50-day high. '
-        'RS = relative strength rating 1–99 vs all scanned stocks. Vol x = volume vs 50-day average. '
-        'Not financial advice.</p></div>',
+        f'<h2 {h2}>📈 Open positions ({len(opn)})</h2>',
+        table(["Ticker", "Bought", "Entry", "Last", "P&amp;L", "Days", "Rank", "Brokers", "Target"],
+              [[tk(p) + (" ⚠️ sell next open" if p["status"] == "exit next open" else ""), fd(p.get("entry_date")),
+                px(p.get("entry")), px(p.get("last")), pc(p.get("pnl")), p.get("days", 0),
+                rk(p.get("rank"), p.get("rank_now")), rk(p.get("broker"), p.get("broker_now")), px(p.get("target"))] for p in opn]),
+        f'<h2 {h2}>📕 Recently closed</h2>',
+        table(["Ticker", "Bought", "Sold", "P&amp;L", "Days", "Why"],
+              [[tk(p), fd(p.get("entry_date")), fd(p.get("exit_date")), pc(p.get("pnl")), p.get("days", "–"),
+                escape(p.get("reason", ""))] for p in closed[:15]]),
+        f'<p style="font-size:11px;color:#888;margin-top:20px">Rules: buy next open when Zacks Rank ≤ {r.get("max_rank")}, '
+        f'average broker rating &lt; {r.get("max_broker")}, Zacks price target ≥ +{r.get("min_upside_pct")}% above the close, '
+        f'EMA uptrend set and close above EMA{CONFIG["ema"]["exit"]}, RS rating ≥ {r.get("min_rs")}. Sell next open after a close below '
+        f'EMA{CONFIG["ema"]["exit"]} or when the Zacks Rank falls to {r.get("sell_rank")}+. Rank / brokers show entry→now. '
+        "Paper portfolio, not financial advice.</p></div>",
     ]
-    subject = (f"Market Radar {fmt_date(result['date'])}: {len(result['breakouts'])} breakouts, "
-               f"{len(result.get('breakdowns', []))} breakdowns, "
-               f"{len(result['rs_days'])} RS-day, {len(result['rs_leaders'])} RS leaders")
+    subject = (f"Market Radar {day}: {len(buys)} buy, {len(sells)} sell · {len(opn)} open "
+               f"({_fmt(avg, '%') if avg is not None else '–'})")
     return subject, "".join(parts)
 
 
