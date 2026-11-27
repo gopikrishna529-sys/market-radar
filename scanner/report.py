@@ -145,6 +145,7 @@ def build_email(result, bt=None, zp=None):
         f'closed P&amp;L {usd(rpl)} from {len(closed)} trades ({wins} winners) · total {usd(upl + rpl)} '
         f'on ${D:,.0f} per position · tracking since {fd(zp.get("start"))}</p>',
         f'<p style="margin:0 0 8px"><a href="{site}#portfolio">Open the portfolio on the website →</a></p>' if site else "",
+        _portfolio_section(zp, opn, closed, h2, th, td),
         _market_section(result, P, buys, opn, h2, th, td),
         f'<h2 {h2}>🟢 Buy at the next open ({len(buys)})</h2>'
         + '<p style="margin:0 0 6px;font-size:12px;color:#555">Sorted by sector strength: '
@@ -166,10 +167,11 @@ def build_email(result, bt=None, zp=None):
         return f"{a}" if b is None or b == a else f'<span style="color:{"#0a7d38" if b < a else "#c62828"}">{a}→{b}</span>'
     parts += [
         f'<h2 {h2}>📈 Open positions ({len(opn)})</h2>',
-        table(["Ticker", "Sector", "Bought", "Entry", "Last", "P&amp;L", "Days", "Rank", "Brokers", "Target"],
+        table(["Ticker", "Sector", "Bought", "Entry", "Last", "Today", "P&amp;L", "Days", "Above EMA50<br>(sell line)", "To target", "Rank", "Brokers"],
               [[tk(p) + (" ⚠️ sell next open" if p["status"] == "exit next open" else ""), sec_cell(p), fd(p.get("entry_date")),
-                px(p.get("entry")), px(p.get("last")), pc(p.get("pnl")), p.get("days", 0),
-                rk(p.get("rank"), p.get("rank_now")), rk(p.get("broker"), p.get("broker_now")), px(p.get("target"))] for p in opn],
+                px(p.get("entry")), px(p.get("last")), pc(p.get("chg")), f'<b>{pc(p.get("pnl"))}</b>', p.get("days", 0),
+                pc(p.get("vs_ema")), pc(p.get("to_target")),
+                rk(p.get("rank"), p.get("rank_now")), rk(p.get("broker"), p.get("broker_now"))] for p in opn],
               tint=[tint(p) for p in opn]),
         f'<h2 {h2}>📕 Recently closed</h2>',
         table(["Ticker", "Bought", "Sold", "P&amp;L", "Days", "Why"],
@@ -184,6 +186,101 @@ def build_email(result, bt=None, zp=None):
     subject = (f"Market Radar {day}: {len(buys)} buy, {len(sells)} sell · {len(opn)} open "
                f"({_fmt(avg, '%') if avg is not None else '–'})")
     return subject, "".join(parts)
+
+
+def _portfolio_section(zp, opn, closed, h2, th, td):
+    """How the portfolio is doing: totals, vs SPY, daily P&L history and a check of every open position."""
+    r = zp.get("rules", {})
+    D = r.get("dollars_per_trade", 10000)
+    daily = zp.get("daily") or []
+    filled = [p for p in zp.get("positions", []) if p.get("entry")]
+
+    def pc(x, d=1):
+        return "–" if x is None else f'<span style="color:{_color(x)}">{x:+.{d}f}%</span>'
+
+    def usd(x):
+        return "–" if x is None else f'<span style="color:{_color(x)}">{"-" if x < 0 else "+"}${abs(x):,.0f}</span>'
+    bt = lambda L: ", ".join(f'<b>{escape(p["ticker"])}</b> {pc(p.get("pnl"))}' for p in L)
+    if not filled:
+        pend = [p for p in zp.get("positions", []) if p["status"] == "pending"]
+        return (f'<h2 {h2}>📊 How the portfolio is doing</h2><p style="margin:0 0 8px;color:#444">Nothing bought yet — '
+                f'{len(pend)} buy orders fill at the next open, and the first results appear in tomorrow\'s email.</p>')
+    upl = sum((p.get("pnl") or 0) / 100 * D for p in opn)
+    rpl = sum((p.get("pnl") or 0) / 100 * D for p in closed)
+    tot = upl + rpl
+    ret = tot / (D * len(filled)) * 100
+    today = daily[-1][1] - daily[-2][1] if len(daily) >= 2 else None
+    first = next((x for x in daily if len(x) > 3 and x[2]), None)
+    spy_ret = (daily[-1][3] / first[3] - 1) * 100 if first and len(daily[-1]) > 3 and daily[-1][3] and first[3] else None
+    wins = [p for p in closed if (p.get("pnl") or 0) > 0]
+    loss = [p for p in closed if (p.get("pnl") or 0) <= 0]
+    avg = lambda L: sum(p["pnl"] for p in L) / len(L) if L else None
+    cell = lambda l, v, sub="": (f'<td style="padding:8px 10px;border:1px solid #e6e6e6;vertical-align:top"><div style="font-size:11px;color:#777">{l}</div>'
+                                  f'<div style="font-size:17px;font-weight:700;margin-top:2px">{v}</div><div style="font-size:11px;color:#777">{sub}</div></td>')
+    kpi = ('<table cellspacing="0" style="border-collapse:collapse;width:100%;margin:4px 0 10px"><tr>'
+           + cell("Total P&amp;L", usd(tot), f"{pc(ret)} on ${D * len(filled):,.0f} used")
+           + cell("Today", usd(today), "change in total P&amp;L")
+           + cell("Open positions", f"{len(opn)}", f"{usd(upl)} · average {pc(avg([p for p in opn if p.get('pnl') is not None]))}")
+           + cell("Closed trades", f"{len(closed)}", f"{usd(rpl)} · {len(wins)} won" + (f" ({len(wins) / len(closed):.0%})" if closed else ""))
+           + cell("vs SPY", pc(ret - spy_ret) if spy_ret is not None else "–",
+                  f"portfolio {pc(ret)} · SPY {pc(spy_ret)} since {fmt_date(first[0]) if first else '–'}")
+           + "</tr></table>")
+    # daily P&L bars (last 30 days)
+    bars = ""
+    hist = daily[-30:]
+    if len(hist) >= 2:
+        m = max(abs(x[1]) for x in hist) or 1
+        bars = ('<table cellspacing="0" style="border-collapse:collapse;margin:2px 0 4px"><tr style="vertical-align:bottom">'
+                + "".join(f'<td title="{fmt_date(x[0])}: ${x[1]:,.0f}" style="padding:0 1px;height:46px;vertical-align:{"bottom" if x[1] >= 0 else "top"}">'
+                          f'<div style="width:14px;height:{max(2, int(44 * abs(x[1]) / m))}px;background:{"#26a69a" if x[1] >= 0 else "#ef5350"}"></div></td>' for x in hist)
+                + f'</tr></table><div style="font-size:11px;color:#888;margin-bottom:8px">Total P&amp;L each day, {fmt_date(hist[0][0])} → {fmt_date(hist[-1][0])}</div>')
+    # checks on open positions
+    ins = []
+    wp = [p for p in opn if p.get("pnl") is not None]
+    if wp:
+        up = [p for p in wp if p["pnl"] > 0]
+        ins.append(f"<b>{len(up)} of {len(wp)}</b> open positions are in profit · average {pc(avg(wp))} after "
+                   f"{sum(p.get('days', 0) for p in wp) / len(wp):.0f} days on average.")
+        b3 = sorted(wp, key=lambda p: -p["pnl"])[:3]
+        w3 = sorted(wp, key=lambda p: p["pnl"])[:3]
+        ins.append(f"<b>Leaders:</b> {bt(b3)}.")
+        if w3 and w3[0]["pnl"] < 0:
+            ins.append(f"<b>Laggards:</b> {bt([p for p in w3 if p['pnl'] < 0])}.")
+    sell = [p for p in opn if p["status"] == "exit next open"]
+    if sell:
+        ins.append(f"<b>Selling at the next open:</b> " + ", ".join(f'<b>{escape(p["ticker"])}</b> ({escape(p.get("reason", ""))})' for p in sell) + ".")
+    near = [p for p in opn if p["status"] == "open" and p.get("vs_ema") is not None and 0 <= p["vs_ema"] <= 2]
+    if near:
+        ins.append("<b>Close to the sell line</b> (within 2% of EMA50 — a close below sells it): "
+                   + ", ".join(f'<b>{escape(p["ticker"])}</b> {pc(p["vs_ema"])} above' for p in near) + ".")
+    hit = [p for p in opn if p.get("to_target") is not None and p["to_target"] <= 0]
+    if hit:
+        ins.append("<b>At or above the Zacks price target</b> (upside used up — consider taking some profit): " + bt(hit) + ".")
+    close_t = [p for p in opn if p.get("to_target") is not None and 0 < p["to_target"] <= 3]
+    if close_t:
+        ins.append("<b>Nearly at target</b> (less than 3% to go): " + ", ".join(f'<b>{escape(p["ticker"])}</b> {pc(p["to_target"])} left' for p in close_t) + ".")
+    big_w = [p for p in wp if p["pnl"] >= 10]
+    if big_w:
+        ins.append(f"<b>Big winners (+10% or more):</b> {bt(big_w)} — let them run while above EMA50.")
+    big_l = [p for p in wp if p["pnl"] <= -7]
+    if big_l:
+        ins.append(f"<b>Down 7% or more:</b> {bt(big_l)} — the EMA50 rule decides, but check the news.")
+    mv = [p for p in opn if p.get("chg") is not None]
+    if mv:
+        bm, wm = max(mv, key=lambda p: p["chg"]), min(mv, key=lambda p: p["chg"])
+        ins.append(f"<b>Today:</b> best {escape(bm['ticker'])} {pc(bm['chg'], 2)} · worst {escape(wm['ticker'])} {pc(wm['chg'], 2)}.")
+    dn = [p for p in opn if isinstance(p.get("rank_now"), int) and isinstance(p.get("rank"), int) and p["rank_now"] > p["rank"]]
+    upg = [p for p in opn if isinstance(p.get("rank_now"), int) and isinstance(p.get("rank"), int) and p["rank_now"] < p["rank"]]
+    if dn:
+        ins.append("<b>Zacks downgrades since buying:</b> " + ", ".join(f'<b>{escape(p["ticker"])}</b> #{p["rank"]}→#{p["rank_now"]}' for p in dn)
+                   + f" (sold automatically at Rank {r.get('sell_rank', 4)}+).")
+    if upg:
+        ins.append("<b>Zacks upgrades since buying:</b> " + ", ".join(f'<b>{escape(p["ticker"])}</b> #{p["rank"]}→#{p["rank_now"]}' for p in upg) + ".")
+    if closed:
+        ins.append(f"<b>Closed trades:</b> average winner {pc(avg(wins))}, average loser {pc(avg(loss))}, held "
+                   f"{sum(p.get('days') or 0 for p in closed) / len(closed):.0f} days on average.")
+    return (f'<h2 {h2}>📊 How the portfolio is doing</h2>' + kpi + bars
+            + '<ul style="margin:4px 0 10px;padding-left:20px;line-height:1.55">' + "".join(f"<li>{x}</li>" for x in ins) + "</ul>")
 
 
 def _market_section(result, P, buys, opn, h2, th, td):
@@ -245,13 +342,6 @@ def _market_section(result, P, buys, opn, h2, th, td):
         big = max(cnt.items(), key=lambda kv: kv[1])
         if big[1] / len(opn) >= 0.3 and len(opn) >= 4:
             ins.append(f'<b>Concentration:</b> {big[1]} of {len(opn)} open positions ({big[1] / len(opn):.0%}) are in {escape(big[0])}.')
-        wp = [p for p in opn if p.get("pnl") is not None]
-        if wp:
-            bst, wst = max(wp, key=lambda p: p["pnl"]), min(wp, key=lambda p: p["pnl"])
-            ins.append(f'<b>Best open position:</b> {escape(bst["ticker"])} {pc(bst["pnl"])} · <b>worst:</b> {escape(wst["ticker"])} {pc(wst["pnl"])}.')
-        dn = [p for p in opn if isinstance(p.get("rank_now"), int) and isinstance(p.get("rank"), int) and p["rank_now"] > p["rank"]]
-        if dn:
-            ins.append(f'<b>Zacks downgrades since you bought:</b> {bt(dn)} — keep an eye on them (sold automatically at Rank {4}+).')
     rows = []
     for r in S:
         k = r["rank"]

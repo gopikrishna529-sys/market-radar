@@ -154,7 +154,9 @@ def update(w, ind):
                 if np.isfinite(cl):
                     tot += (cl / p["entry"] - 1) * dl
                     n_open += 1
-        st["daily"] = [x for x in st.get("daily", []) if x[0] != d] + [[d, round(float(tot), 2), n_open]]
+        bench = CONFIG["relative_strength"]["benchmark"]
+        spy = _f(c[bench].iloc[k]) if bench in c else None
+        st["daily"] = [x for x in st.get("daily", []) if x[0] != d] + [[d, round(float(tot), 2), n_open, spy]]
         st["last_day"] = d
     # sector of every position (SPDR sector fund it belongs to)
     try:
@@ -179,6 +181,12 @@ def update(w, ind):
                 p["days"] = len(dates) - 1 - dates.index(p["entry_date"])
             z = zi.get(t) or {}
             p["rank_now"], p["broker_now"] = z.get("rank"), _f(z.get("broker"))
+            e50 = em[t].iloc[-1] if t in em else np.nan
+            p["vs_ema"] = _f((cl / e50 - 1) * 100, 1) if np.isfinite(cl) and np.isfinite(e50) and e50 > 0 else None
+            tg = z.get("target") or p.get("target")
+            p["to_target"] = _f((tg / cl - 1) * 100, 1) if tg and np.isfinite(cl) and cl > 0 else None
+            if np.isfinite(cl) and len(c) > 1 and np.isfinite(c[t].iloc[-2]) and c[t].iloc[-2] > 0:
+                p["chg"] = _f((cl / c[t].iloc[-2] - 1) * 100)
     st["blocked"] = sorted(blocked)
     st["rules"] = {k: s[k] for k in ("max_rank", "max_broker", "min_upside_pct", "min_rs", "sell_rank",
                                      "dollars_per_trade", "cost_pct")}
