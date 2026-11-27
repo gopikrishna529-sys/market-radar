@@ -29,8 +29,8 @@ h2{font-size:18px;margin:0}
 .card h3{margin:0 0 12px;font-size:14px;font-weight:650}
 .card h3 small{color:var(--muted);font-weight:400;margin-left:6px}
 .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-@media(max-width:1100px){.grid2{grid-template-columns:1fr}}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}.grid2>*{min-width:0}
+@media(max-width:1100px){.grid2{grid-template-columns:minmax(0,1fr)}}
 .muted{color:var(--muted)}.up{color:var(--up)}.down{color:var(--down)}.gold{color:var(--gold)}
 .kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:16px}
 .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
@@ -58,7 +58,7 @@ tr:hover .wl,.wl.on,.info .wl{opacity:1}.wl.on{color:var(--accent);border-color:
 .hist div:hover{outline:1px solid #fff}
 .hx{display:flex;gap:3px;font-size:10.5px;color:var(--muted)}.hx span{flex:1;text-align:center}
 .pager{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;color:var(--muted)}
-.rchart{position:relative;width:100%;user-select:none;touch-action:none}
+.rchart{position:relative;width:100%;user-select:none;touch-action:pan-y}
 .rchart canvas{display:block;cursor:crosshair}
 .empty{color:var(--muted);padding:40px 0;text-align:center}
 .qlist b{margin-right:2px}
@@ -86,6 +86,32 @@ table.trades tbody tr{cursor:pointer} tr.sel td{background:#1d2a3a!important}
 .wlp .it:hover{background:var(--panel2)}.wlp .it.on{background:#1d2a3a;box-shadow:inset 3px 0 0 var(--accent)}.wlp .it b{font-weight:650}.wlp .it>div{min-width:0}.wlp .it .nm3{display:block;color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wlp .it .r{text-align:right;font-variant-numeric:tabular-nums}.wlp .ft{padding:6px 10px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}
 @media(max-width:1100px){.cwrap{grid-template-columns:1fr}.wlp{position:static;height:420px}}
+/* ---------- phones ---------- */
+@media(max-width:760px){
+  header{flex-wrap:wrap;height:auto;padding:8px 10px 0;gap:6px 10px}
+  .brand{font-size:16px}.asof{display:none}
+  .hsearch{flex:1;min-width:0;margin-left:0}.hsearch input{width:100%!important;font-size:16px}
+  nav{order:3;flex:0 0 100%;height:40px;margin:0 -10px;padding:0 4px;scrollbar-width:none}nav::-webkit-scrollbar{display:none}
+  nav a{padding:0 11px;font-size:14px}
+  main{padding:12px 10px 50px}
+  .card{padding:12px;border-radius:10px;margin-bottom:12px}.card h3{font-size:14px}.card h3 small{display:block;margin:3px 0 0}
+  h2{font-size:17px}
+  .kpis{grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}.kpi{padding:9px 10px}.kpi .v{font-size:18px}.kpi .s{font-size:11.5px}
+  .row{gap:8px}
+  .seg{max-width:100%;overflow-x:auto;scrollbar-width:none}.seg::-webkit-scrollbar{display:none}.seg button{padding:7px 10px;white-space:nowrap;font-size:13px}
+  input,select{font-size:16px!important;max-width:100%}
+  .row input[style*="width"]{width:100%!important}
+  th,td{padding:7px 8px;font-size:13px}
+  .tbl-wrap{-webkit-overflow-scrolling:touch}
+  .tk~.muted,td .wl{display:none}
+  .note{font-size:12px}
+  /* chart page */
+  .cmain{border-radius:8px}.ctb{gap:5px;padding:6px}.ctb #cq{width:78px}.ctb .sep,.ctb #chq{display:none}
+  .ctb .sm,.ctb .seg.sm button{padding:5px 8px;font-size:12.5px}
+  .cinfo2{gap:4px 10px;padding:6px 8px;font-size:12px}.cinfo2 .sym{font-size:16px}.cinfo2 .px{font-size:15px}
+  .wlp{height:380px}.wlp .hd{padding:8px}
+  .chelp{left:6px;right:6px;max-width:none}
+}
 #cvcard.full{position:fixed;inset:0;z-index:50;margin:0;border-radius:0;border:0;overflow:hidden}
 .tbl-wrap.scroll{max-height:620px;overflow:auto;border:1px solid var(--line);border-radius:8px}
 .tbl-wrap.scroll thead th{position:sticky;top:0;background:var(--panel);z-index:2}
@@ -152,6 +178,7 @@ const WL = {
   has(t){ const s=this.load(); return (s.lists[s.active]||[]).includes(t); },
   toggle(t){ const s=this.load(); const l=s.lists[s.active] ||= []; const i=l.indexOf(t); i>=0?l.splice(i,1):l.push(t); this.save(s); return i<0; },
 };
+function money(x){ return x==null||!isFinite(x)?"–":(x<0?"-":"")+"$"+num(Math.abs(x),0); }
 function starHTML(t){ const on=WL.has(t); return `<span class="wl ${on?"on":""}" data-star="${esc(t)}" title="Add to / remove from watchlist">${on?"✓ Watching":"+ Watch"}</span>`; }
 document.addEventListener("click", e => {
   const s = e.target.closest("[data-star]"); if(s){ e.stopPropagation(); const on = WL.toggle(s.dataset.star); document.querySelectorAll(`[data-star="${CSS.escape(s.dataset.star)}"]`).forEach(x=>{x.classList.toggle("on",on);x.textContent=on?"✓ Watching":"+ Watch";}); return; }
@@ -456,11 +483,11 @@ async function viewPortfolio(){
     ${kp("Exposure",(s.exposure??"–")+"%",`vol ${s.vol??"–"}% · Calmar ${s.calmar??"–"}`)}
   </div>
   ${md.dollars?`<div class="card" style="padding:12px 16px"><div class="row" style="gap:28px">
-    <b>If every trade were $${num(md.dollars.per_trade,0)}:</b>
-    <span>Total profit <b class="${cls(md.dollars.total_pnl)}">$${num(md.dollars.total_pnl,0)}</b></span>
-    <span class="muted">closed <b class="${cls(md.dollars.closed_pnl)}">$${num(md.dollars.closed_pnl,0)}</b> · still open <b class="${cls(md.dollars.open_pnl)}">$${num(md.dollars.open_pnl,0)}</b></span>
+    <b>If every trade were ${money(md.dollars.per_trade)}:</b>
+    <span>Total profit <b class="${cls(md.dollars.total_pnl)}">${money(md.dollars.total_pnl)}</b></span>
+    <span class="muted">closed <b class="${cls(md.dollars.closed_pnl)}">${money(md.dollars.closed_pnl)}</b> · still open <b class="${cls(md.dollars.open_pnl)}">${money(md.dollars.open_pnl)}</b></span>
     <span class="muted">most trades open at once <b style="color:var(--text)">${md.dollars.max_open}</b> (avg ${md.dollars.avg_open})</span>
-    <span class="muted">capital needed at the peak <b style="color:var(--text)">$${num(md.dollars.peak_capital,0)}</b> → return on it <b class="${cls(md.dollars.return_on_peak)}">${pct(md.dollars.return_on_peak,1)}</b></span></div></div>`:""}
+    <span class="muted">capital needed at the peak <b style="color:var(--text)">${money(md.dollars.peak_capital)}</b> → return on it <b class="${cls(md.dollars.return_on_peak)}">${pct(md.dollars.return_on_peak,1)}</b></span></div></div>`:""}
   <div class="card"><h3>Equity curve <small>account starts at 100 · strategy vs SPY buy &amp; hold · drag, or swipe on the date line, to move · pinch or Ctrl/⌘ + scroll to zoom · double-click to reset</small></h3><div id="eq"></div></div>
   <div class="card"><h3>Signals by date <small>every entry the rules produced on a day · click a row to open it on the chart</small></h3>
     <div class="row" style="margin-bottom:10px"><button id="sdp" title="Earlier date">‹</button><select id="sdsel"></select><button id="sdn" title="Later date">›</button><input id="sdq" placeholder="Filter ticker or company" style="width:200px" value="${esc(PF.sdq||"")}"><span class="muted" id="sdsum"></span></div>
@@ -521,8 +548,8 @@ async function viewPortfolio(){
   const totRows=[["Portfolio total return",x=>`<b class="${cls(x.m.stats?.total)}">${pct(x.m.stats?.total)}</b>`],["Portfolio CAGR",x=>`<span class="${cls(x.m.stats?.cagr)}">${pct(x.m.stats?.cagr)}</span>`],
     ["Portfolio max drawdown",x=>`<span class="down">${pct(x.m.stats?.max_dd)}</span>`],["Sharpe",x=>x.m.stats?.sharpe??"–"],
     ["Sum of all trade returns",x=>`<span class="${cls(x.sum)}">${pct(x.sum,0)}</span>`],
-    ["Total profit at $"+num(D0,0)+" / trade",x=>`<b class="${cls(x.m.dollars?.total_pnl)}">$${num(x.m.dollars?.total_pnl,0)}</b>`],
-    ["…of which still open",x=>`<span class="${cls(x.m.dollars?.open_pnl)}">$${num(x.m.dollars?.open_pnl,0)}</span>`]];
+    ["Total profit at $"+num(D0,0)+" / trade",x=>`<b class="${cls(x.m.dollars?.total_pnl)}">${money(x.m.dollars?.total_pnl)}</b>`],
+    ["…of which still open",x=>`<span class="${cls(x.m.dollars?.open_pnl)}">${money(x.m.dollars?.open_pnl)}</span>`]];
   const rowsS=[["Trades","trades",""],["Closed / open",null,""],["Win rate","win_rate","%"],["Average trade","avg_pnl","%s"],["Median trade","median_pnl","%s"],["Average win","avg_win","%s"],["Average loss","avg_loss","%s"],["Payoff (avg win ÷ avg loss)","payoff",""],["Profit factor","profit_factor",""],["Best trade","best","%s"],["Worst trade","worst","%s"],["Avg days held","avg_bars",""],["Avg max run-up (MFE)","avg_mfe","%s"],["Avg max drawdown (MAE)","avg_mae","%s"],["Run-up of losing trades","avg_mfe_losers","%s"],["Drawdown of winning trades","avg_mae_winners","%s"],["Trades that ran ≥10%","pct_mfe_over_10","%"],["Profit captured of run-up","capture","%"],["Longest win / loss streak",null,""]];
   const cell=(o,k,f)=>{ if(k==null) return ""; const v=o[k]; if(v==null) return "–"; return f==="%s"?`<span class="${cls(v)}">${pct(v)}</span>`:f==="%"?v+"%":v; };
   const spec=(o,l)=>l==="Closed / open"?`${o.closed??"–"} / ${o.open??"–"}`:`${o.max_win_streak??"–"} / ${o.max_loss_streak??"–"}`;
@@ -551,17 +578,17 @@ async function viewPortfolio(){
     const k2=(l,v,sub,c="")=>`<div class="kpi"><div class="l">${l}</div><div class="v ${c}">${v}</div>${sub?`<div class="s">${sub}</div>`:""}</div>`;
     $("#opstats").innerHTML=op.length?[
       k2("Open positions",op.length,`${L.length} long · ${S.length} short`),
-      k2("Unrealised P&L",`$${num(usd(op),0)}`,`at $${num(D,0)} per trade · $${num(op.length*D,0)} invested`,cls(usd(op))),
+      k2("Unrealised P&L",`${money(usd(op))}`,`at ${money(D)} per trade · ${money(op.length*D)} invested`,cls(usd(op))),
       k2("Total P&L %",pct(usd(op)/(op.length*D)*100),`long ${pct(L.length?usd(L)/(L.length*D)*100:null)} · short ${pct(S.length?usd(S)/(S.length*D)*100:null)}`,cls(usd(op))),
-      k2("1 share of every trade",`$${num(one(op).pnl,0)}`,`cost $${num(one(op).cost,0)} → <b class="${cls(one(op).pnl)}">${pct(one(op).pct)}</b><br>long $${num(one(L).pnl,0)} (${pct(one(L).pct,1)}) · short $${num(one(S).pnl,0)} (${pct(one(S).pct,1)})`,cls(one(op).pnl)),
-      k2("Long P&L",`$${num(usd(L),0)}`,`avg ${pct(avg(L,"pnl"))}`,cls(usd(L))),
-      k2("Short P&L",`$${num(usd(S),0)}`,`avg ${pct(avg(S,"pnl"))}`,cls(usd(S))),
+      k2("1 share of every trade",`${money(one(op).pnl)}`,`cost ${money(one(op).cost)} → <b class="${cls(one(op).pnl)}">${pct(one(op).pct)}</b><br>long ${money(one(L).pnl)} (${pct(one(L).pct,1)}) · short ${money(one(S).pnl)} (${pct(one(S).pct,1)})`,cls(one(op).pnl)),
+      k2("Long P&L",`${money(usd(L))}`,`avg ${pct(avg(L,"pnl"))}`,cls(usd(L))),
+      k2("Short P&L",`${money(usd(S))}`,`avg ${pct(avg(S,"pnl"))}`,cls(usd(S))),
       k2("Avg open trade",pct(avg(op,"pnl")),`${(win.length/op.length*100).toFixed(1)}% in profit`,cls(avg(op,"pnl"))),
       k2("Best / worst",`<span class="up">${pct(best.pnl,1)}</span> / <span class="down">${pct(worst.pnl,1)}</span>`,`${esc(best.ticker)} · ${esc(worst.ticker)}`),
       k2("Avg days held",(avg(op,"bars")??0).toFixed(1),""),
       k2("Avg max run-up",pct(avg(op,"mfe")),`avg max drawdown ${pct(avg(op,"mae"))}`,"up"),
       k2("Exit at next open",exitN,"closed beyond EMA"+EMA.exit+" today"),
-      k2("Net exposure",`$${num((L.length-S.length)*D,0)}`,`long $${num(L.length*D,0)} · short $${num(S.length*D,0)}`)].join(""):"";
+      k2("Net exposure",`${money((L.length-S.length)*D)}`,`long ${money(L.length*D)} · short ${money(S.length*D)}`)].join(""):"";
     $("#opn").textContent=op.length.toLocaleString()+" open";
     $("#opnote").textContent=op.length?`P&L marked at the ${fd(b.data_end)} close.`:"";
     $("#opexp").onclick=()=>{ const st2=STOCKS||{map:{}}, rows=sortRows(op,PF.ops.k,PF.ops.d);
@@ -622,7 +649,7 @@ function renderLog(){
   const tot=rows.reduce((a,r)=>a+(r.pnl||0)/100*D,0), avg=cl.length?cl.reduce((a,r)=>a+r.pnl,0)/cl.length:null;
   $("#tsum").innerHTML=`<b>${rows.length.toLocaleString()}</b> trades entered ${PF.f.from?fd(PF.f.from):fd(BT.rows[0]?.entry_date)} → ${PF.f.to?fd(PF.f.to):fd(BT.data_end)}
     (${rows.filter(r=>r.side==="long").length} long · ${rows.filter(r=>r.side==="short").length} short) · win rate <b>${cl.length?(w.length/cl.length*100).toFixed(1)+"%":"–"}</b>
-    · avg closed trade <b class="${cls(avg)}">${pct(avg)}</b> · total at $${num(D,0)}/trade <b class="${cls(tot)}">$${num(tot,0)}</b>`;
+    · avg closed trade <b class="${cls(avg)}">${pct(avg)}</b> · total at ${money(D)}/trade <b class="${cls(tot)}">${money(tot)}</b>`;
   rows=sortRows(rows,PF.sort.k,PF.sort.d); const per=100, pages=Math.max(1,Math.ceil(rows.length/per)); PF.page=Math.min(PF.page,pages-1);
   $("#tcount").textContent=`${rows.length.toLocaleString()} trades`;
   $("#tlog").innerHTML=rows.length?tradeTable(rows.slice(PF.page*per,PF.page*per+per),PF.sort):'<div class="empty">No trades match.</div>';
@@ -797,7 +824,8 @@ async function viewChart(ticker,focus){
       {type:"line",name:"+DI",v:dm.plus,color:"#26a69a"},{type:"line",name:"−DI",v:dm.minus,color:"#ef5350"},{type:"line",name:"ADX",v:dm.adx,color:"#f5c542",width:1.8}]}};
   const build=()=>{ const keep=CH.chart?{f:CH.chart.from,t:CH.chart.to,m:CH.chart.meas,hl:CH.chart.hl}:null; if(CH.chart) CH.chart.destroy();
     const top=$("#cv").getBoundingClientRect().top+(CH.full?0:window.scrollY);
-    const H=Math.max(460,window.innerHeight-(CH.full?$("#cv").getBoundingClientRect().top:top)-14);
+    const H=window.innerWidth<760&&!CH.full?Math.max(400,Math.round(window.innerHeight*.72))           // phone: leave room to scroll past the chart
+      :Math.max(460,window.innerHeight-(CH.full?$("#cv").getBoundingClientRect().top:top)-14);
     CH.chart=new RChart($("#cv"),{dates,height:H,initial:70,get vlines(){ return CH.hide.zr?[]:zl; },onMeasureEnd:()=>$("#mbtn").classList.remove("pri"),
       panes:[PANES.price,...(CH.hide.macd?[]:[PANES.macd]),...(CH.hide.dmi?[]:[PANES.dmi])]});
     if(keep){ CH.chart.from=keep.f; CH.chart.to=keep.t; CH.chart.meas=keep.m&&keep.m.pi===0?keep.m:null; CH.chart.hl=keep.hl; CH.chart.draw(); }
@@ -1152,7 +1180,7 @@ async function viewZPortfolio(){
   const rulesTxt=`Buy at the next open when, at the close: Zacks Rank ≤ <b>${R.max_rank??2}</b> · average broker rating &lt; <b>${R.max_broker??2}</b> (Buy / Strong Buy) ·
     Zacks price target ≥ <b>+${R.min_upside_pct??10}%</b> above the close · EMA uptrend set (${EMA_TXT}) and close above EMA${EMA.exit} · RS rating ≥ <b>${R.min_rs??80}</b> · passes the scanner's liquidity filter.
     Sell at the next open after a close below EMA${EMA.exit}, or when the Zacks Rank falls to ${R.sell_rank??4} or worse.
-    $${num(R.dollars_per_trade??10000,0)} per position, ${R.cost_pct??0.05}% cost per buy/sell. Tracked forward from its first day (no Zacks history before that). The old EMA strategy is under <a href="#backtest">Backtest (old)</a>.`;
+    ${money(R.dollars_per_trade??10000)} per position, ${R.cost_pct??0.05}% cost per buy/sell. Tracked forward from its first day (no Zacks history before that). The old EMA strategy is under <a href="#backtest">Backtest (old)</a>.`;
   if(!z){ $("#main").innerHTML=`<h2>Portfolio</h2><div class="card"><p class="note">${rulesTxt}</p><div class="empty">Tracking starts with the next daily scan.</div></div>`; return; }
   await stocks();
   const P=z.positions||[], isOpen=p=>p.status==="open"||p.status==="exit next open";
@@ -1165,9 +1193,9 @@ async function viewZPortfolio(){
   $("#main").innerHTML=`<div class="row" style="margin-bottom:12px;justify-content:space-between"><div class="row"><h2>Portfolio <span class="muted" style="font-weight:400;font-size:14px">· Zacks strategy</span></h2>
       <span class="muted">tracking since ${fd(z.start)} · prices to ${fd(z.data_date)}</span></div><button id="zpexp">⬇ Export (CSV)</button></div>
     <div class="kpis">${kp("Open positions",open.length,`${pend.length} buy order${pend.length===1?"":"s"} for the next open`)}
-      ${kp("Open P&amp;L",`$${num(upl,0)}`,`average ${pct(avgO)}`,cls(upl))}
-      ${kp("Closed P&amp;L",`$${num(rpl,0)}`,`${closed.length} closed · ${closed.length?Math.round(wins/closed.length*100)+"% winners":"–"}`,cls(rpl))}
-      ${kp("Total P&amp;L",`$${num(upl+rpl,0)}`,`on $${num(D,0)} per position`,cls(upl+rpl))}</div>
+      ${kp("Open P&amp;L",`${money(upl)}`,`average ${pct(avgO)}`,cls(upl))}
+      ${kp("Closed P&amp;L",`${money(rpl)}`,`${closed.length} closed · ${closed.length?Math.round(wins/closed.length*100)+"% winners":"–"}`,cls(rpl))}
+      ${kp("Total P&amp;L",`${money(upl+rpl)}`,`on ${money(D)} per position`,cls(upl+rpl))}</div>
     <div class="card"><div class="row" style="gap:10px">
       <div class="seg" id="zpshow">${[["current",`Open + orders (${open.length+pend.length})`],["open",`Open (${open.length})`],["pending",`Buy orders (${pend.length})`],["closed",`Closed (${closed.length})`],["all",`All (${P.length})`]].map(([k,l])=>`<button data-s="${k}" class="${ZP.show===k?"on":""}">${l}</button>`).join("")}</div>
       <label class="muted">Entry date <select id="zpday"><option value="">All dates</option>${days.map(d=>`<option value="${d}" ${ZP.day===d?"selected":""}>${fd(d)} (${cnt(d)})</option>`).join("")}</select></label>
@@ -1189,7 +1217,7 @@ async function viewZPortfolio(){
       &&(!ZP.day||p.entry_date===ZP.day)&&matchQ(ZP.q,p.ticker,nm(p.ticker)));
   const draw=()=>{ const rows=filt().map(p=>({...p,now:p.status==="closed"?p.exit:p.last})), srt=sortRows(rows,ZP.st.k,ZP.st.d);
     const wp=rows.filter(p=>p.pnl!=null), av=wp.length?wp.reduce((a,p)=>a+p.pnl,0)/wp.length:null;
-    $("#zpsum").innerHTML=`${rows.length} position${rows.length===1?"":"s"}${wp.length?` · average <b class="${cls(av)}">${pct(av)}</b> · $<b class="${cls(av)}">${num(wp.reduce((a,p)=>a+p.pnl/100*D,0),0)}</b>`:""}`;
+    $("#zpsum").innerHTML=`${rows.length} position${rows.length===1?"":"s"}${wp.length?` · average <b class="${cls(av)}">${pct(av)}</b> · <b class="${cls(av)}">${money(wp.reduce((a,p)=>a+p.pnl/100*D,0))}</b>`:""}`;
     $("#zptbl").innerHTML=rows.length?`<table><thead><tr>${cols.map(([k,l])=>`<th data-k="${k}">${l}${ZP.st.k===k?(ZP.st.d>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>${srt.map(p=>`<tr>${cols.map(([,,f])=>`<td>${f(p)}</td>`).join("")}</tr>`).join("")}</tbody></table>`
       :`<div class="empty">${ZP.day?`No positions with entry date ${fd(ZP.day)} for this view.`:ZP.show==="open"&&pend.length?"No open positions yet — the buy orders fill at the next open.":"Nothing to show."}</div>`;
     $("#zptbl").querySelectorAll("th").forEach(h=>h.onclick=()=>{ ZP.st.d=ZP.st.k===h.dataset.k?-ZP.st.d:-1; ZP.st.k=h.dataset.k; draw(); }); };
