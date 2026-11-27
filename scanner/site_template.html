@@ -678,7 +678,7 @@ async function renderWLP(cur){
       <optgroup label="Indexes"><option value="etf:SPY">S&amp;P 500 (SPY)</option><option value="etf:QQQ">Nasdaq 100 (QQQ)</option><option value="etf:DIA">Dow Jones 30 (DIA)</option></optgroup>
       <optgroup label="Sectors">${Object.entries(SECTOR_ETFS).sort((a,b)=>a[1].localeCompare(b[1])).map(([k,n])=>`<option value="etf:${k}">${esc(n)} (${k})</option>`).join("")}</optgroup>
       <optgroup label="Industries">${Object.entries(INDUSTRY_ETFS).sort((a,b)=>a[1].localeCompare(b[1])).map(([k,n])=>`<option value="etf:${k}">${esc(n)} (${k})</option>`).join("")}</optgroup></select>
-    <select id="wlo" title="Sort the list"><option value="">Sort: A → Z</option><option value="chg">Sort: today % (best first)</option><option value="m1">Sort: 1 month % (best first)</option><option value="rs">Sort: RS rating (best first)</option><option value="v">Sort: P&amp;L / list % (best first)</option></select>
+    <select id="wlo" title="Sort the list"><option value="">Sort: default (A → Z, ETFs by weight)</option><option value="chg">Sort: today % (best first)</option><option value="m1">Sort: 1 month % (best first)</option><option value="rs">Sort: RS rating (best first)</option><option value="v">Sort: P&amp;L / list % (best first)</option></select>
     ${isPf?`<select id="wld"><option value="">Any entry date</option>${days.map(d=>`<option value="${d}" ${W.day===d?"selected":""}>Entry ${fd(d)}</option>`).join("")}</select>`:""}
     <input id="wlq" placeholder="Filter" value="${esc(W.q)}" autocomplete="off"></div>
     <div class="lb" id="wlb" tabindex="0"></div><div class="ft" id="wlf"></div>`;
