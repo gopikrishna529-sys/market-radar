@@ -45,9 +45,10 @@ def _num(v):
         return s
 
 
-def load_latest(prefix="zacks_rank"):
-    """Latest screen plus the tickers that were not in the previous day's screen."""
-    files = _files(prefix)
+def load_latest(prefix="zacks_rank", as_of=None):
+    """Latest screen plus the tickers that were not in the previous day's screen.
+    as_of='YYYY-MM-DD': only files saved on or before that day (for back-dated AI picks)."""
+    files = [f for f in _files(prefix) if as_of is None or _day(f) <= as_of]
     if not files:
         return None
     cur = _read(files[-1])
@@ -150,14 +151,14 @@ def _as_date(v):
         return None
 
 
-def load_info():
+def load_info(as_of=None):
     """Per-ticker Zacks facts merged from the newest file of every configured screen:
     {ticker: {rank, value, growth, momentum, vgm, broker, upside, target, zclose, date}}"""
     zc, prefixes = _screens()
     words = [w.lower() for w in (zc.get("chart_levels") or ["target"])]
     info = {}
     for pre in prefixes:
-        z = load_latest(pre)
+        z = load_latest(pre, as_of)
         if not z:
             continue
         cols, ti = z["columns"], z["ticker_col"]

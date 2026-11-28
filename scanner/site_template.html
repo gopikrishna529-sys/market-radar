@@ -141,6 +141,17 @@ table:has(tbody td:first-child .tk) td:first-child{max-width:220px;overflow:hidd
 .mban button{background:transparent;border:0;color:inherit;font-size:16px;padding:0 4px}
 @media(max-width:760px){.mban{margin:8px 10px 0}.mood{font-size:11px;padding:2px 7px}}
 th[draggable=true]{cursor:grab}th.dragover{box-shadow:inset 3px 0 0 var(--accent);background:var(--panel2)}
+.aip{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:8px;cursor:pointer}.aip:hover{border-color:#3a4a5c}
+.aih{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.ain{color:var(--muted);font-size:12px;width:16px}.aname{font-size:12px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aires{margin-left:auto;font-size:13px;white-space:nowrap}.aibar{height:3px;background:#1d2631;border-radius:2px;margin:6px 0}.aibar div{height:100%;border-radius:2px}
+.aitags{display:flex;gap:5px;flex-wrap:wrap}.atag{font-size:11px;padding:1px 7px;border-radius:10px;background:#1d2a3a;color:#b9d4f5}
+.aiplan{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;margin-top:6px;color:#c8d0da}.aiplan b{color:var(--muted);font-weight:600}
+.aiwhy{display:none;font-size:12.5px;margin-top:7px;line-height:1.55;color:#c8d0da;border-top:1px solid var(--line);padding-top:6px}.aip.on .aiwhy{display:block}
+.aisec{font-size:15px;margin:4px 0 8px}.aitrack{background:#0f151c;border:1px solid var(--line);border-radius:9px;padding:9px 12px;min-width:220px;font-size:13px;line-height:1.6}
+@media(min-width:761px){nav{overflow:visible}}
+.navmore{position:relative;display:flex}.moremenu{display:none;position:absolute;top:100%;left:0;z-index:70;min-width:200px;background:#121820;border:1px solid #2b3846;border-radius:9px;padding:6px;box-shadow:0 12px 30px rgba(0,0,0,.5);flex-direction:column}
+.navmore.on .moremenu{display:flex}.moremenu a{height:auto!important;padding:9px 12px!important;border-radius:6px;border-bottom:0!important}.moremenu a:hover{background:var(--panel2)}.moremenu a.on{color:var(--accent)}
+@media(max-width:760px){.navmore{display:contents}#morebtn{display:none!important}.moremenu{display:contents!important}.moremenu a{padding:0 11px!important;display:flex;align-items:center}}
 #tipbox{position:fixed;z-index:999;pointer-events:none;max-width:320px;background:#1c2530;color:#e7ebf0;border:1px solid #33414f;border-radius:7px;padding:6px 9px;font-size:12px;line-height:1.45;box-shadow:0 6px 24px rgba(0,0,0,.5);display:none}
 [data-tip]{cursor:default}
 .zbs{display:inline-flex;gap:2px;vertical-align:middle}.zbs .zb{min-width:16px;height:16px;font-size:10px}
@@ -168,15 +179,17 @@ th[draggable=true]{cursor:grab}th.dragover{box-shadow:inset 3px 0 0 var(--accent
   <div class="brand">Market <span>Radar</span></div>
   <nav id="nav">
     <a href="#portfolio" data-r="portfolio">Portfolio</a>
+    <a href="#ai" data-r="ai">AI Picks</a>
     <a href="#scanner" data-r="scanner">Scanner</a>
     <a href="#chart" data-r="chart">Chart</a>
-    <a href="#watchlist" data-r="watchlist">Watchlist</a>
-    <a href="#sectors" data-r="sectors">Sectors</a>
-    <a href="#rotation" data-r="rotation">Rotation</a>
     <a href="#zacks" data-r="zacks">Zacks</a>
     <a href="#etfs" data-r="etfs">ETFs</a>
-    <a href="#backtest" data-r="backtest" title="The old EMA-trend strategy, backtested">Backtest</a>
-    <a href="#download" data-r="download">Download</a>
+    <a href="#watchlist" data-r="watchlist">Watchlist</a>
+    <span class="navmore"><a href="javascript:void 0" id="morebtn">More ▾</a><span class="moremenu" id="moremenu">
+      <a href="#sectors" data-r="sectors">Sectors</a>
+      <a href="#rotation" data-r="rotation">Sector rotation</a>
+      <a href="#backtest" data-r="backtest" title="The old EMA-trend strategy, backtested">Backtest (old strategy)</a>
+      <a href="#download" data-r="download">Download data</a></span></span>
   </nav>
   <div class="hsearch"><input id="gq" placeholder="Search ticker or company…  ( / )" autocomplete="off" spellcheck="false"></div>
   <span id="moodpill"></span>
@@ -1415,15 +1428,79 @@ async function viewETFs(arg){
   draw();
 }
 
+
+/* ------------------------------------------------------------------ AI PICKS */
+const AI={side:"both",open:{}};
+async function viewAI(day){
+  let idx; try{ idx=await J("data/ai/index.json"); }catch(e){ idx=[]; }
+  if(!idx.length){ $("#main").innerHTML=`<h2>AI picks</h2><div class="empty">The first AI picks appear after the next website build.</div>`; return; }
+  const dates=idx.map(x=>x.date).reverse(); day=day&&dates.includes(day)?day:dates[0];
+  const R=await J(`data/ai/${day}.json`); const st=await stocks(); let ZI={}; try{ ZI=await (CH.zi ||= J("data/zinfo.json")); }catch(e){}
+  const V=R.view||{}, M=V.mood||{};
+  const scol={"Lean long":"#1b8a3a","Selective":"#c48a12","Defensive":"#d32f2f"}[V.stance]||"#3a4654";
+  const gcol={A:"#1b8a3a",B:"#2e7dd1",C:"#5b6672"};
+  const nm=t=>esc(((st.map[t]||{}).name)||"");
+  const P=x=>x==null?"–":`<span class="${cls(x)}">${pct(x,1)}</span>`;
+  const outTag=r=>!r?'<span class="muted" data-tip="Results appear after the next trading day">pending</span>'
+    :r.out==="target"?'<span class="zb" style="background:#1b8a3a" data-tip="Reached the 2R target">TARGET</span>'
+    :r.out==="stop"?'<span class="zb" style="background:#d32f2f" data-tip="Hit the stop">STOPPED</span>':'<span class="zb" style="background:#3a4654" data-tip="Neither stop nor target hit yet">OPEN</span>';
+  const card=(p,k)=>{ const long=p.side==="long", key=day+p.t+p.side, r=p.res;
+    return `<div class="aip ${AI.open[key]?"on":""}" data-key="${esc(key)}">
+      <div class="aih"><span class="ain">${k+1}</span><span class="tk" data-tk="${esc(p.t)}">${esc(p.t)}</span>
+        <span class="zb" style="background:${gcol[p.grade]}" data-tip="Grade ${p.grade}: AI score ${p.score}/100 (A ≥ 75 · B ≥ 63 · C below)">${p.grade} ${p.score}</span>
+        ${zBoxes(ZI[p.t]||(p.zr?{rank:p.zr,broker:p.zb,vgm:p.vgm}:null),{short:true,vgmOnly:true})}
+        <span class="muted aname">${nm(p.t)}</span>
+        <span class="aires">${r?`${P(r.now)} ${outTag(r)}`:outTag(null)}</span></div>
+      <div class="aibar"><div style="width:${p.score}%;background:${long?"#26a69a":"#ef5350"}"></div></div>
+      <div class="aitags">${(p.pat||[]).map(x=>`<span class="atag">${esc(x)}</span>`).join("")}${p.sector?`<span class="atag muted" data-tip="Sector strength rank today (1 = strongest of 11)">${esc(p.sector)}${p.sector_rank?" #"+p.sector_rank:""}</span>`:""}</div>
+      <div class="aiplan"><span data-tip="${long?"Buy-stop just above today's high: only fills if the stock keeps going up":"Sell-short stop just below today's low: only fills if it keeps falling"}"><b>${long?"Buy above":"Short below"}</b> ${fmtPx(p.entry)}</span>
+        <span data-tip="Exit if price ${long?"falls to":"rises to"} this level (EMA50 or 2× average daily range)"><b>Stop</b> ${fmtPx(p.stop)}</span>
+        <span data-tip="2× the risk (reward:risk 2:1)"><b>Target</b> ${fmtPx(p.target)}${p.t2?` <span class="muted" data-tip="Zacks analysts' average price target">/ ${fmtPx(p.t2)}</span>`:""}</span>
+        <span data-tip="Distance from entry to stop. Size the position so this loss is small (e.g. 1% of your account)."><b>Risk</b> ${p.risk}%</span></div>
+      <div class="aiwhy">${(p.why||[]).map(x=>`<div>${x.startsWith("⚠")?"":"✓ "}${esc(x)}</div>`).join("")}
+        ${r?`<div class="muted" style="margin-top:4px">Since ${fd(day)} (entered at the next open ${fmtPx(r.in)}): 1 day ${P(r.d1)} · 5 days ${P(r.d5)} · 10 days ${P(r.d10)} · now ${P(r.now)}</div>`:""}</div>
+    </div>`; };
+  const all=idx.filter(x=>x.perf&&x.perf.long&&x.perf.long.n);
+  const agg=k=>{ const v=all.filter(x=>x.perf[k]&&x.perf[k].n); const n=v.reduce((a,x)=>a+x.perf[k].n,0); return n?{avg:v.reduce((a,x)=>a+x.perf[k].avg*x.perf[k].n,0)/n,win:v.reduce((a,x)=>a+x.perf[k].win*x.perf[k].n,0)/n,n}:null; };
+  const AL=agg("long"), AS=agg("short");
+  $("#main").innerHTML=`<div class="row" style="margin-bottom:12px;justify-content:space-between"><div class="row"><h2>AI picks</h2>
+      <select id="aid">${dates.map(d=>{ const x=idx.find(y=>y.date===d); return `<option value="${d}" ${d===day?"selected":""}>${fd(d)}${d===dates[0]?" (latest)":""} · ${x.stance}</option>`; }).join("")}</select>
+      <span class="muted">${R.zacks?"":"· no Zacks data for this date (technicals + mood only)"}</span></div>
+      <div class="row"><button class="pri" id="aol">▶ Long charts</button><button class="pri" id="aos" style="background:#c0392b;border-color:#c0392b">▶ Short charts</button></div></div>
+    <div class="card aiview" style="border-left:4px solid ${scol}">
+      <div class="row" style="justify-content:space-between;align-items:flex-start"><div style="flex:1;min-width:260px">
+        <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">AI stance for ${fd(day)}</div>
+        <div style="font-size:22px;font-weight:750;color:${scol}">${esc(V.stance||"")}</div><div style="margin:4px 0 8px">${esc(V.tip||"")}</div>
+        <div class="muted" style="font-size:12.5px">Market mood <b>${esc(M.mood||"–")}</b>${M.vix!=null?` · VIX ${M.vix}`:""}${M.pcr_total!=null?` · put/call ${M.pcr_total}`:""}${V.breadth!=null?` · ${V.breadth}% of stocks above EMA200`:""}<br>
+          Strongest sectors: <b>${(V.top_sectors||[]).map(esc).join(", ")}</b> · weakest: <b>${(V.weak_sectors||[]).map(esc).join(", ")}</b><br>
+          ${V.n_long??0} stocks qualified as longs and ${V.n_short??0} as shorts — the best ${R.longs.length} of each are shown.</div></div>
+        <div class="aitrack"><div class="muted" style="font-size:12px;margin-bottom:4px" data-tip="Every saved day's picks, entered at the next open and measured to the latest close. Short returns are shown as profit when the price fell.">Track record · ${all.length} days</div>
+          <div><b class="up">Longs</b> ${AL?`${P(AL.avg)} avg · ${AL.win.toFixed(0)}% winners`:"–"}</div><div><b class="down">Shorts</b> ${AS?`${P(AS.avg)} avg · ${AS.win.toFixed(0)}% winners`:"–"}</div>
+          <a href="javascript:void 0" id="aith" style="font-size:12px">day by day ▾</a></div></div>
+      <div id="aitd" style="display:none;margin-top:10px"><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Stance</th><th>Mood</th><th>Longs avg</th><th>Long winners</th><th>Shorts avg</th><th>Short winners</th></tr></thead><tbody>
+        ${[...idx].reverse().map(x=>`<tr><td><a href="#ai/${x.date}">${fd(x.date)}</a></td><td>${esc(x.stance)}</td><td>${esc(x.mood||"–")}</td><td>${P(x.perf?.long?.avg)}</td><td>${x.perf?.long?.win!=null?x.perf.long.win+"%":"–"}</td><td>${P(x.perf?.short?.avg)}</td><td>${x.perf?.short?.win!=null?x.perf.short.win+"%":"–"}</td></tr>`).join("")}</tbody></table></div></div></div>
+    <div class="grid2"><div><h3 class="aisec up">▲ Long ideas <small class="muted">${R.longs.length}</small></h3>${R.longs.map(card).join("")||'<div class="empty">No long setups passed today.</div>'}</div>
+      <div><h3 class="aisec down">▼ Short ideas <small class="muted">${R.shorts.length}</small></h3>${R.shorts.map(card).join("")||'<div class="empty">No short setups passed today.</div>'}</div></div>
+    <div class="card"><p class="note" style="margin:0"><b>How the AI picks work.</b> Every stock that passes the liquidity filter is scored out of 100 on: EMA trend and how fresh it is, relative strength (RS), 3-month momentum, chart patterns (base breakouts, pullbacks to EMA20/50, bull/bear flags, volatility squeezes, engulfing candles, failed rallies, 20-day breakdowns), volume surges, Zacks Rank / broker rating / price target / VGM, the strength of the stock's sector, and the market mood (VIX, put/call — longs are marked down and shorts up when fear is high). Over-stretched or very volatile stocks lose points. Entry is a stop order beyond today's high (long) or low (short); the stop is the 50-day EMA or 2× the average daily range; the target is 2× the risk. Click a card for the reasons. It is a rules-based model, not financial advice — use it as a shortlist and check each chart.</p></div>`;
+  $("#aid").onchange=e=>{ location.hash="#ai/"+e.target.value; };
+  $("#aith").onclick=()=>{ const d=$("#aitd"); d.style.display=d.style.display==="none"?"":"none"; };
+  $("#aol").onclick=()=>openChartList(`AI longs ${fd(day)}`,R.longs.map(p=>p.t).filter(t=>st.map[t]));
+  $("#aos").onclick=()=>openChartList(`AI shorts ${fd(day)}`,R.shorts.map(p=>p.t).filter(t=>st.map[t]));
+  document.querySelectorAll(".aip").forEach(el=>el.onclick=e=>{ if(e.target.closest(".tk")) return; AI.open[el.dataset.key]=!AI.open[el.dataset.key]; el.classList.toggle("on"); });
+}
+
 /* ------------------------------------------------------------------ router */
+document.addEventListener("click",e=>{ const nm=document.querySelector(".navmore"); if(!nm) return;
+  if(e.target.closest("#morebtn")){ e.preventDefault(); nm.classList.toggle("on"); } else if(!e.target.closest(".moremenu")) nm.classList.remove("on"); });
 async function route(){
   let [r,arg,arg2]=(location.hash.slice(1)||"portfolio").split("/"); if(r==="zpf") r="portfolio";
   document.querySelectorAll("#nav a").forEach(a=>a.classList.toggle("on",a.dataset.r===r));
+  { const mb=$("#morebtn"), act=document.querySelector("#moremenu a.on"); mb.classList.toggle("on",!!act); mb.textContent=(act?act.textContent.replace(/\s*\(.*\)/,""):"More")+" ▾"; $(".navmore").classList.remove("on"); }
   if(CH.chart&&r!=="chart"){ CH.chart.destroy(); CH.chart=null; }
   if(PF.eq&&r!=="backtest"){ PF.eq.destroy(); PF.eq=null; }
   try{
     if(r==="scanner") await viewScanner(); else if(r==="chart") await viewChart(arg&&decodeURIComponent(arg),arg2);
-    else if(r==="watchlist") await viewWatchlist(); else if(r==="download") await viewDownload(); else if(r==="sectors") await viewSectors(arg==="group"?decodeURIComponent(arg2||""):""); else if(r==="rotation") await viewRotation(); else if(r==="zacks") await viewZacks(); else if(r==="etfs") await viewETFs(arg); else if(r==="backtest") await viewPortfolio(); else await viewZPortfolio();
+    else if(r==="watchlist") await viewWatchlist(); else if(r==="download") await viewDownload(); else if(r==="sectors") await viewSectors(arg==="group"?decodeURIComponent(arg2||""):""); else if(r==="rotation") await viewRotation(); else if(r==="zacks") await viewZacks(); else if(r==="etfs") await viewETFs(arg); else if(r==="ai") await viewAI(arg); else if(r==="backtest") await viewPortfolio(); else await viewZPortfolio();
   }catch(e){ console.error(e); $("#main").innerHTML=`<div class="empty">Could not load this page (${esc(e.message)}).</div>`; }
 }
 window.addEventListener("hashchange",route);

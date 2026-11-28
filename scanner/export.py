@@ -128,6 +128,11 @@ def build_site(w, ind):
         build_etfs(w, ind, data / "etfs_all.json")
     except Exception as e:
         print(f"ETF tab: skipped ({e})")
+    aid = ROOT / "data" / "ai"                              # AI picks, one file per day + index
+    if aid.exists():
+        (data / "ai").mkdir(exist_ok=True)
+        for f in aid.glob("*.json"):
+            shutil.copy(f, data / "ai" / f.name)
     sm = ROOT / "data" / "sentiment.json"                   # market mood (VIX, put/call) for the banner
     if sm.exists():
         (data / "sentiment.json").write_text(json.dumps((json.loads(sm.read_text()) or {}).get("summary") or {}))

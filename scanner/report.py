@@ -162,6 +162,7 @@ def build_email(result, bt=None, zp=None, brief=None):
         table(["Ticker", "Bought", "Entry", "Last", "P&amp;L", "Why"],
               [[tk(p), fd(p.get("entry_date")), px(p.get("entry")), px(p.get("last")), pc(p.get("pnl")), escape(p.get("reason", ""))] for p in sells]),
         _market_section(result, P, buys, opn, h2, th, td, brief),
+        _ai_section(brief.get("ai"), h2, th, td),
         _zchanges_section(brief, h2),
         _near_section(brief, h2, th, td, sec),
         _leaders_section(brief, result, h2, th, td),
@@ -338,6 +339,25 @@ def _fills_section(brief, h2, th, td):
     return (f'<h2 {h2}>🧾 What happened at the open</h2>'
             + _tbl(th, td, ["Ticker", "Side", "Fill (open)", "Previous close", "Gap", "Open → close", "Result"], rows)
             + (f'<p style="margin:0 0 10px;font-size:12px;color:#555">{note}</p>' if note else ""))
+
+
+def _ai_section(R, h2, th, td):
+    if not R:
+        return ""
+    site = os.environ.get("SITE_URL", "")
+    V = R.get("view") or {}
+    col = {"Lean long": "#0a7d38", "Selective": "#d17a00", "Defensive": "#c62828"}.get(V.get("stance"), "#555")
+
+    def rows(L, long):
+        return [[f'<b>{escape(p["t"])}</b>', f'{p["grade"]} {p["score"]}', escape(", ".join(p.get("pat") or []) or "trend"),
+                 f'{"above" if long else "below"} {p["entry"]:,.2f}', f'{p["stop"]:,.2f}', f'{p["target"]:,.2f}', f'{p["risk"]}%',
+                 escape((p.get("why") or [""])[0])] for p in L[:5]]
+    head = ["Ticker", "Grade", "Setup", "Entry", "Stop", "Target", "Risk", "Main reason"]
+    return (f'<h2 {h2}>🤖 AI picks — stance: <span style="color:{col}">{escape(V.get("stance", ""))}</span></h2>'
+            f'<p style="margin:0 0 6px">{escape(V.get("tip", ""))}</p>'
+            '<p style="margin:6px 0 2px"><b style="color:#0a7d38">▲ Top long ideas</b></p>' + _tbl(th, td, head, rows(R.get("longs") or [], True))
+            + '<p style="margin:6px 0 2px"><b style="color:#c62828">▼ Top short ideas</b></p>' + _tbl(th, td, head, rows(R.get("shorts") or [], False))
+            + (f'<p style="margin:0 0 10px;font-size:12px"><a href="{site}#ai">All picks, reasons and the track record →</a></p>' if site else ""))
 
 
 def _zchanges_section(brief, h2):

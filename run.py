@@ -35,6 +35,13 @@ def main():
         update_holdings()                           # S&P 500 / Nasdaq 100 / sector ETF members (once a day)
     except Exception as e:
         print(f"holdings: skipped ({e})")
+    def ai_picks(w, ind):
+        try:
+            from scanner.ai import update as update_ai
+            update_ai(w, ind)
+        except Exception as e:
+            print(f"AI picks: skipped ({e})")
+
     def mood(w, daily_email=False):
         """Refresh VIX / put-call. A new red alert gets its own e-mail unless today's full e-mail carries it."""
         try:
@@ -57,6 +64,7 @@ def main():
         mood(w)
         ind = compute(w)
         zportfolio.update(w, ind)                   # marks to market; buys only on a new price day
+        ai_picks(w, ind)
         build_site(w, ind)
         return
     update_reference(client)
@@ -70,12 +78,19 @@ def main():
     bt = run_backtest(w, ind)
     zp = zportfolio.update(w, ind)
     md = mood(w, daily_email="--no-email" not in sys.argv)
+    ai_picks(w, ind)
     build_site(w, ind)
     if "--no-email" not in sys.argv:
         try:
             from scanner.brief import build as build_brief
             brief = build_brief(w, ind, result, zp)
             brief["mood"] = (md or {}).get("summary")
+            try:
+                from scanner.ai import DIR as AI_DIR
+                last = sorted(AI_DIR.glob("????-??-??.json"))[-1]
+                brief["ai"] = json.loads(last.read_text())
+            except Exception:
+                pass
         except Exception as e:                      # the email still goes out without the extras
             print(f"morning brief: skipped ({e})")
             brief = None
