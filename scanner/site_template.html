@@ -123,7 +123,9 @@ table.trades tbody tr{cursor:pointer} tr.sel td{background:#1d2a3a!important}
 #ztbl tbody tr:hover td:first-child,table:has(tbody td:first-child .tk) tbody tr:hover td:first-child{background:var(--panel2)}
 table:has(tbody td:first-child .tk) td:first-child{max-width:220px;overflow:hidden;text-overflow:ellipsis}
 /* Zacks letter boxes (style scores, rank, brokers) */
-.zb{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 3px;border-radius:4px;font-size:10.5px;font-weight:750;color:#fff;line-height:1;vertical-align:middle;cursor:help}
+.zb{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 3px;border-radius:4px;font-size:10.5px;font-weight:750;color:#fff;line-height:1;vertical-align:middle;cursor:default}
+#tipbox{position:fixed;z-index:999;pointer-events:none;max-width:320px;background:#1c2530;color:#e7ebf0;border:1px solid #33414f;border-radius:7px;padding:6px 9px;font-size:12px;line-height:1.45;box-shadow:0 6px 24px rgba(0,0,0,.5);display:none}
+[data-tip]{cursor:default}
 .zbs{display:inline-flex;gap:2px;vertical-align:middle}.zbs .zb{min-width:16px;height:16px;font-size:10px}
 .zbs .zb i{font-style:normal;font-weight:600;opacity:.75;font-size:8.5px;margin-right:1px}
 #ztbl thead tr.zf th{top:var(--zh,34px)}
@@ -155,6 +157,7 @@ table:has(tbody td:first-child .tk) td:first-child{max-width:220px;overflow:hidd
     <a href="#sectors" data-r="sectors">Sectors</a>
     <a href="#rotation" data-r="rotation">Rotation</a>
     <a href="#zacks" data-r="zacks">Zacks</a>
+    <a href="#etfs" data-r="etfs">ETFs</a>
     <a href="#backtest" data-r="backtest" title="The old EMA-trend strategy, backtested">Backtest</a>
     <a href="#download" data-r="download">Download</a>
   </nav>
@@ -193,7 +196,7 @@ const brkTxt=b=>b<1.5?"Strong Buy":b<2.5?"Buy":b<3.5?"Hold":b<4.5?"Sell":"Strong
 /* tiny Zacks boxes: rank · brokers · V G M VGM (hover explains each) */
 function zBoxes(z,opt={}){
   if(!z) return "";
-  const b=(t,bg,tip,cls="")=>`<span class="zb ${cls}" style="background:${bg}" title="${esc(tip)}">${t}</span>`;
+  const b=(t,bg,tip,cls="")=>`<span class="zb ${cls}" style="background:${bg}" data-tip="${esc(tip)}">${t}</span>`;
   let h="";
   if(z.rank) h+=b(opt.short?z.rank:"#"+z.rank,ZCOLS[z.rank],`Zacks Rank #${z.rank} ${RANK_NAMES[z.rank]} (1 = Strong Buy … 5 = Strong Sell)`)+" ";
   if(z.broker!=null&&z.broker!==""){ const v=+z.broker; h+=b(v.toFixed(opt.short?1:2),ZCOLS[Math.min(5,Math.max(1,Math.round(v)))],`Average broker rating ${v.toFixed(2)} = ${brkTxt(v)} (1.0 = Strong Buy … 5.0 = Strong Sell)`)+" "; }
@@ -201,6 +204,16 @@ function zBoxes(z,opt={}){
   if(S.length) h+=`<span class="zbs">${S.map(([k,l,n])=>b(opt.vgmOnly?z[k]:(l==="VGM"?`<i>VGM</i>${z[k]}`:`<i>${l}</i>${z[k]}`),SCOLS[z[k]]||"#555",`Zacks ${n} score: ${z[k]} (A best … F worst)`)).join("")}</span>`;
   return h;
 }
+/* instant tooltips: any element with data-tip="..." (hover on a computer, tap on a phone) */
+(()=>{ let box=null, tm=null;
+  const show=(el,x,y)=>{ box ||= Object.assign(document.body.appendChild(document.createElement("div")),{id:"tipbox"});
+    box.innerHTML=el.dataset.tip; box.style.display="block"; const r=box.getBoundingClientRect();
+    box.style.left=Math.max(6,Math.min(innerWidth-r.width-6,x+12))+"px"; box.style.top=(y+r.height+24>innerHeight?y-r.height-12:y+16)+"px"; };
+  const hide=()=>{ if(box) box.style.display="none"; };
+  document.addEventListener("mouseover",e=>{ const el=e.target.closest&&e.target.closest("[data-tip]"); if(el) show(el,e.clientX,e.clientY); else hide(); });
+  document.addEventListener("mousemove",e=>{ const el=e.target.closest&&e.target.closest("[data-tip]"); if(el&&box&&box.style.display==="block") show(el,e.clientX,e.clientY); });
+  document.addEventListener("touchstart",e=>{ const el=e.target.closest&&e.target.closest("[data-tip]"); if(el){ const t=e.touches[0]; show(el,t.clientX,t.clientY); clearTimeout(tm); tm=setTimeout(hide,2500); } else hide(); },{passive:true});
+  addEventListener("scroll",hide,true); })();
 function money(x){ return x==null||!isFinite(x)?"–":(x<0?"-":"")+"$"+num(Math.abs(x),0); }
 function starHTML(t){ const on=WL.has(t); return `<span class="wl ${on?"on":""}" data-star="${esc(t)}" title="Add to / remove from watchlist">${on?"✓ Watching":"+ Watch"}</span>`; }
 document.addEventListener("click", e => {
@@ -816,7 +829,7 @@ async function viewChart(ticker,focus){
   const zinfoP=(CH.zi ||= J("data/zinfo.json")).catch(()=>({}));
   const ZC={1:"#1b8a3a",2:"#43a047",3:"#f5a623",4:"#ef6c00",5:"#d32f2f"}, SC={A:"#1b8a3a",B:"#43a047",C:"#f5a623",D:"#ef6c00",F:"#d32f2f"};
   const infoLine=zi=>{ if(!s) return `<span class="sym">${esc(ticker)}</span><span class="muted">No chart data for this symbol (only stocks ≥ $1 with ≥ 50k average volume, plus major ETFs).</span>`;
-    const pill=(t,bg,tip)=>`<span class="zp" style="background:${bg}" title="${esc(tip||"")}">${t}</span>`;
+    const pill=(t,bg,tip)=>`<span class="zp" style="background:${bg}" ${tip?`data-tip="${esc(tip)}"`:""}>${t}</span>`;
     const bcol=b=>ZC[Math.min(5,Math.max(1,Math.round(b)))];
     const vol=s.avg_vol_k!=null?(s.avg_vol_k>=1000?(s.avg_vol_k/1000).toFixed(1)+"M":s.avg_vol_k+"k"):"–";
     let z="";
@@ -1274,6 +1287,102 @@ async function viewZPortfolio(){
   draw();
 }
 
+
+/* ------------------------------------------------------------------ ETFs */
+const EF={view:"hi",cat:"",iss:"",lev:"",adv:"1",q:"",per:"m3",st:{k:"m3",d:-1},lim:300,blim:30};
+const EPER=[["d1","1 day"],["w1","1 week"],["m1","1 month"],["m3","3 months"],["m6","6 months"],["ytd","YTD"],["y1","1 year"]];
+const levTag=f=>f.inc&&f.lev===1?`<span class="zb" style="background:#3b6fd8" data-tip="Income fund: sells options for monthly / weekly payouts. Price return shown here leaves out those payouts.">INC</span>`
+  :f.lev===1?`<span class="zb" style="background:#3a4654" data-tip="Not leveraged">1×</span>`
+  :`<span class="zb" style="background:${f.lev>0?(f.lev>=3?"#0f7a3a":"#2e9d57"):(f.lev<=-3?"#b71c1c":"#e0533a")}" data-tip="${f.lev>0?"Leveraged long":"Inverse (short)"}: aims for ${f.lev>0?"":"−"}${Math.abs(f.lev)}× the DAILY move of ${esc(f.u||"its index")}. Over weeks it drifts from ${Math.abs(f.lev)}× because of daily resetting.">${f.lev>0?"":"−"}${Math.abs(f.lev)}×</span>`;
+async function viewETFs(arg){
+  let E; try{ E=await (EF.data ||= J("data/etfs_all.json")); }catch(e){ $("#main").innerHTML=`<h2>ETFs</h2><div class="empty">The ETF list appears after the next website build.</div>`; return; }
+  const st=await stocks(); const F=E.funds, by={}; F.forEach(f=>by[f.t]=f);
+  if(arg){ EF.view="bundles"; EF.q=decodeURIComponent(arg); }
+  const cats=Object.entries(F.reduce((a,f)=>(a[f.cat]=(a[f.cat]||0)+1,a),{})).sort((a,b)=>b[1]-a[1]);
+  const isss=Object.entries(F.reduce((a,f)=>(f.is&&(a[f.is]=(a[f.is]||0)+1),a),{})).filter(x=>x[1]>=3).sort((a,b)=>a[0].localeCompare(b[0]));
+  $("#main").innerHTML=`<div class="row" style="margin-bottom:12px;justify-content:space-between"><div class="row"><h2>ETFs</h2>
+      <span class="muted">${num(F.length,0)} funds · prices to ${fd(E.date)} · returns are price only (income funds' payouts not included)</span></div>
+      <div class="row"><button class="pri" id="eopen">▶ Charts</button><button id="eexp">⬇ Export (CSV)</button></div></div>
+    <div class="card"><div class="row" style="gap:10px">
+      <div class="seg" id="ev">${[["hi","Highlights"],["bundles","Bundles"],["all","All ETFs"]].map(([k,l])=>`<button data-v="${k}" class="${EF.view===k?"on":""}">${l}</button>`).join("")}</div>
+      <input id="eq" placeholder="Ticker, name or underlying (NVDA, Nasdaq, bitcoin…)" value="${esc(EF.q)}" style="width:300px" autocomplete="off">
+      <select id="ecat"><option value="">All categories</option>${cats.map(([c,n])=>`<option value="${esc(c)}" ${EF.cat===c?"selected":""}>${esc(c)} (${n})</option>`).join("")}</select>
+      <select id="eiss"><option value="">All issuers</option>${isss.map(([c,n])=>`<option value="${esc(c)}" ${EF.iss===c?"selected":""}>${esc(c)} (${n})</option>`).join("")}</select>
+      <select id="elev">${[["","Any leverage"],["1","Not leveraged (1×)"],["long","Leveraged long (2×, 3×…)"],["inv","Inverse / short"],["inc","Income / covered-call"]].map(([v,l])=>`<option value="${v}" ${EF.lev===v?"selected":""}>${l}</option>`).join("")}</select>
+      <select id="eadv" data-tip="Average dollars traded per day (last 20 days). Thin funds have wide bid/ask spreads.">${[["0","Any trading volume"],["0.1","≥ $0.1M a day"],["1","≥ $1M a day"],["10","≥ $10M a day"],["100","≥ $100M a day"]].map(([v,l])=>`<option value="${v}" ${EF.adv===v?"selected":""}>${l}</option>`).join("")}</select>
+      <select id="eper" data-tip="Period used to rank the Highlights and sort Bundles">${EPER.map(([k,l])=>`<option value="${k}" ${EF.per===k?"selected":""}>Rank by ${l}</option>`).join("")}</select>
+    </div></div><div id="ebody"></div>`;
+  const qm=(f,q)=>{ if(!q) return true; const Q=q.toUpperCase(); return f.t===Q||(f.u||"")===Q||f.t.includes(Q)||(f.n||"").toUpperCase().includes(Q)||(f.u||"").includes(Q); };
+  const ok=f=>(!EF.cat||f.cat===EF.cat)&&(!EF.iss||f.is===EF.iss)&&(+EF.adv===0||(f.adv||0)>=+EF.adv)
+    &&(!EF.lev||(EF.lev==="1"?f.lev===1&&!f.inc:EF.lev==="long"?f.lev>1:EF.lev==="inv"?f.lev<0:f.inc));
+  const P=x=>x==null?"–":`<span class="${cls(x)}">${pct(x,1)}</span>`;
+  const tk=t=>(st.map[t]?`<span class="tk" data-tk="${esc(t)}">${esc(t)}</span>`:`<b data-tip="No chart (very thin trading)">${esc(t)}</b>`)
+    +(by[t]&&by[t].x?` <span class="gold" data-tip="Price history has a one-day jump over 150% — probably a reverse split our data has not adjusted for. Treat its returns with caution.">⚠</span>`:"");
+  const perL=(EPER.find(p=>p[0]===EF.per)||[,""])[1];
+  const mini=(title,rows,tip,col=EF.per)=>`<div class="card"><h3 ${tip?`data-tip="${esc(tip)}"`:""}>${title} <button class="sm" style="float:right;padding:2px 8px" data-open="${esc(rows.map(f=>f.t).join(","))}" data-name="${esc(title.replace(/<[^>]+>/g,""))}">▶ Charts</button></h3>
+    ${rows.length?`<div class="tbl-wrap"><table><thead><tr><th>Ticker</th><th>Name</th><th></th><th>${(EPER.find(p=>p[0]===col)||[,"Return"])[1]}</th><th>1Y</th><th>$ / day</th></tr></thead><tbody>${rows.map(f=>`<tr><td>${tk(f.t)}</td><td class="muted" style="max-width:260px;overflow:hidden;text-overflow:ellipsis">${esc(f.n)}</td><td>${levTag(f)}</td><td><b>${P(f[col])}</b></td><td>${P(f.y1)}</td><td class="muted">${f.adv!=null?"$"+(f.adv>=1?num(f.adv,f.adv>=100?0:1)+"M":num(f.adv*1000,0)+"k"):"–"}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">None with these filters.</div>`}</div>`;
+  const shown=[];
+  const draw=()=>{
+    const L=F.filter(f=>ok(f)&&qm(f,EF.q)); shown.length=0;
+    if(EF.view==="hi"){
+      const un=L.filter(f=>f.lev===1&&!f.inc&&!f.x), val=f=>f[EF.per];
+      const top=(arr,k,n=12,dir=-1)=>arr.filter(f=>f[k]!=null&&!f.x).sort((a,b)=>dir*((a[k])-(b[k]))).slice(0,n);
+      const ra=un.filter(f=>f.y1!=null&&f.vol>0).map(f=>({...f,ra:f.y1/f.vol})).sort((a,b)=>b.ra-a.ra).slice(0,12);
+      const near=un.filter(f=>f.hi!=null&&f.hi>=-1.5&&f.tr==="L").sort((a,b)=>(b[EF.per]??-1e9)-(a[EF.per]??-1e9)).slice(0,12);
+      const pol=F.filter(f=>f.cat==="Politicians, insiders & gurus"&&qm(f,EF.q)).sort((a,b)=>(b.y1??b.m6??-1e9)-(a.y1??a.m6??-1e9));
+      const catRows=Object.entries(un.reduce((a,f)=>{ if(val(f)!=null){ (a[f.cat] ||= []).push(f); } return a; },{})).map(([c,a])=>{ a.sort((x,y)=>val(y)-val(x)); const med=a.map(val).sort((x,y)=>x-y)[Math.floor(a.length/2)]; return {c,n:a.length,med,best:a[0],worst:a.at(-1)}; }).sort((a,b)=>b.med-a.med);
+      const lead=[...top(un,EF.per),...top(L.filter(f=>f.lev!==1),EF.per)];
+      lead.forEach(f=>shown.push(f.t));
+      $("#ebody").innerHTML=`<div class="card"><h3>Categories ranked by ${perL} <small>median fund in each category (unleveraged), with its best and worst fund</small></h3><div class="tbl-wrap"><table><thead><tr><th>Category</th><th>Funds</th><th>Median</th><th>Best</th><th></th><th>Worst</th><th></th></tr></thead><tbody>
+          ${catRows.map(r=>`<tr><td><a href="javascript:void 0" data-cat="${esc(r.c)}">${esc(r.c)}</a></td><td>${r.n}</td><td><b>${P(r.med)}</b></td><td>${tk(r.best.t)}</td><td>${P(val(r.best))}</td><td>${tk(r.worst.t)}</td><td>${P(val(r.worst))}</td></tr>`).join("")}</tbody></table></div></div>
+        <div class="grid2">${mini(`🏆 Best ${perL} — not leveraged`,top(un,EF.per))}${mini(`📉 Worst ${perL} — not leveraged`,top(un,EF.per,12,1))}</div>
+        <div class="grid2">${mini(`⚖️ Best risk-adjusted, 1 year`,ra,"1-year return divided by volatility: steady gainers rank above wild ones","y1")}${mini(`🚀 Leveraged & inverse — best ${perL}`,top(L.filter(f=>f.lev!==1),EF.per),"Leveraged funds reset daily; great in strong trends, they lose value in choppy markets")}</div>
+        <div class="grid2">${mini(`🏛 Politicians, insiders & gurus <small>(all, by 1 year)</small>`,pol,"Funds that copy Congress members' trades (NANC = Democrats, KRUZ = Republicans), insider buying, hedge-fund 13F filings…","y1")}${mini(`📈 Near a 52-week high and in an EMA uptrend`,near)}</div>
+        <div class="grid2">${mini(`💵 Income / covered-call — best ${perL} (price only)`,top(L.filter(f=>f.inc),EF.per),"These pay large monthly/weekly distributions that are NOT included here, so their real return is higher")}${mini(`🪙 Crypto — best ${perL}`,top(L.filter(f=>f.cat==="Crypto"),EF.per))}</div>`;
+    } else if(EF.view==="bundles"){
+      const G={}; F.filter(f=>f.u&&ok(f)).forEach(f=>(G[f.u] ||= []).push(f));
+      let B=Object.entries(G).filter(([u,a])=>a.length>=2||(a.length>=1&&a[0].t!==u)).map(([u,a])=>({u,a,base:by[a[0].base]||null,adv:a.reduce((s,f)=>s+(f.adv||0),0)}))
+        .filter(b=>!EF.q||b.u===EF.q.toUpperCase()||b.a.some(f=>qm(f,EF.q))||(st.map[b.u]&&(st.map[b.u].name||"").toUpperCase().includes(EF.q.toUpperCase())));
+      B.sort((a,b)=>b.adv-a.adv);
+      const total=B.length; B=B.slice(0,EF.blim);
+      B.forEach(b=>{ if(st.map[b.u]) shown.push(b.u); b.a.forEach(f=>shown.push(f.t)); });
+      const S=b=>{ const s0=st.map[b.u]||st.map[(b.base||{}).t]||{}; return s0; };
+      $("#ebody").innerHTML=`<p class="note" style="margin:0 0 10px">Every fund built on the same underlying, side by side — long, short, 2×, 3×, income. <b data-tip="3-month return minus (leverage × the underlying's 3-month return). Negative = the fund lost ground to daily resetting (volatility decay); positive = trend helped it.">Decay</b> shows how far a leveraged fund drifted from leverage × the underlying over 3 months. ${total} bundles${total>B.length?`, biggest ${B.length} shown`:""}.</p>
+        ${B.map(b=>{ const s0=S(b), bt=st.map[b.u]?b.u:(b.base||{}).t; const rows=[...b.a].sort((x,y)=>(y.lev-x.lev)||((y.adv||0)-(x.adv||0)));
+          return `<div class="card"><h3 style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${bt?tk(bt):`<b>${esc(b.u)}</b>`} <span class="muted" style="font-weight:400">${esc(s0.name||(b.base||{}).n||"")}</span>
+            ${s0.close!=null?`<span>${fmtPx(s0.close)} ${P(s0.chg)} · 1M ${P(s0.perf_1m)} · 3M ${P(s0.perf_3m)}</span>`:""}<span class="muted" style="font-weight:400">${b.a.length} funds</span>
+            <button class="sm" style="margin-left:auto;padding:2px 8px" data-open="${esc([bt,...rows.map(f=>f.t)].filter(Boolean).join(","))}" data-name="${esc(b.u+" bundle")}">▶ Charts</button></h3>
+            <div class="tbl-wrap"><table><thead><tr><th>Ticker</th><th>Type</th><th>Issuer</th><th>Price</th><th>1D</th><th>1M</th><th>3M</th><th>1Y</th><th data-tip="3M return vs leverage × underlying">Decay 3M</th><th>$ / day</th><th>Name</th></tr></thead><tbody>
+            ${rows.map(f=>`<tr><td>${tk(f.t)}</td><td>${levTag(f)}</td><td class="muted">${esc(f.is||"")}</td><td>${fmtPx(f.px)}</td><td>${P(f.d1)}</td><td>${P(f.m1)}</td><td><b>${P(f.m3)}</b></td><td>${P(f.y1)}</td><td>${f.dec==null?"–":`<span class="${cls(f.dec)}">${f.dec>0?"+":""}${f.dec} pts</span>`}</td><td class="muted">${f.adv!=null?"$"+(f.adv>=1?num(f.adv,f.adv>=100?0:1)+"M":num(f.adv*1000,0)+"k"):"–"}</td><td class="muted" style="max-width:300px;overflow:hidden;text-overflow:ellipsis">${esc(f.n)}</td></tr>`).join("")}
+            </tbody></table></div></div>`; }).join("")}
+        ${total>B.length?`<div class="row"><button id="emore">Show more bundles (${total-B.length} left)</button></div>`:""}`;
+      $("#emore")&&($("#emore").onclick=()=>{ EF.blim+=30; draw(); });
+    } else {
+      const cols=[["t","Ticker"],["n","Name"],["cat","Category"],["is","Issuer"],["lev","Lev"],["px","Price"],["d1","1D"],["w1","1W"],["m1","1M"],["m3","3M"],["m6","6M"],["ytd","YTD"],["y1","1Y"],["hi","From 52w high"],["vol","Volatility"],["dd","Max drop 1Y"],["adv","$ / day"],["tr","Trend"],["age","Age"]];
+      const tips={vol:"Annualised volatility over 3 months (how much it swings). SPY is usually 12–20%.",dd:"Largest fall from a peak during the last year",hi:"How far below its 52-week high",age:"Years of price history we have (max ~2)",adv:"Average dollars traded per day, last 20 days"};
+      const rows=sortRows(L,EF.st.k,EF.st.d); rows.forEach(f=>shown.push(f.t));
+      const R=rows.slice(0,EF.lim);
+      $("#ebody").innerHTML=`<div class="card"><h3>${num(rows.length,0)} funds <small>click a column to sort</small></h3><div class="tbl-wrap scroll" style="max-height:720px"><table><thead><tr>${cols.map(([k,l])=>`<th data-k="${k}" ${tips[k]?`data-tip="${tips[k]}"`:""}>${l}${EF.st.k===k?(EF.st.d>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>
+        ${R.map(f=>`<tr><td>${tk(f.t)}</td><td class="muted" style="max-width:280px;overflow:hidden;text-overflow:ellipsis">${esc(f.n)}</td><td class="muted">${esc(f.cat)}</td><td class="muted">${esc(f.is||"")}</td><td>${levTag(f)}</td><td>${fmtPx(f.px)}</td>
+          <td>${P(f.d1)}</td><td>${P(f.w1)}</td><td>${P(f.m1)}</td><td>${P(f.m3)}</td><td>${P(f.m6)}</td><td>${P(f.ytd)}</td><td><b>${P(f.y1)}</b></td><td>${P(f.hi)}</td><td>${f.vol!=null?f.vol+"%":"–"}</td><td class="down">${f.dd!=null?f.dd+"%":"–"}</td>
+          <td class="muted">${f.adv!=null?"$"+(f.adv>=1?num(f.adv,f.adv>=100?0:1)+"M":num(f.adv*1000,0)+"k"):"–"}</td><td>${f.tr==="L"?'<span class="up">▲ up</span>':f.tr==="S"?'<span class="down">▼ down</span>':"–"}</td><td class="muted">${f.age!=null?(f.age/365).toFixed(1)+"y":"–"}</td></tr>`).join("")}
+        </tbody></table></div>${rows.length>R.length?`<div class="row" style="padding:10px"><span class="muted">Showing ${R.length} of ${rows.length}</span><button id="emore">Show all</button></div>`:""}</div>`;
+      document.querySelectorAll("#ebody th[data-k]").forEach(h=>h.onclick=()=>{ const k=h.dataset.k; EF.st.d=EF.st.k===k?-EF.st.d:-1; EF.st.k=k; draw(); });
+      $("#emore")&&($("#emore").onclick=()=>{ EF.lim=1e9; draw(); });
+    }
+    document.querySelectorAll("#ebody [data-open]").forEach(b=>b.onclick=()=>openChartList(b.dataset.name,b.dataset.open.split(",").filter(t=>st.map[t])));
+    document.querySelectorAll("#ebody [data-cat]").forEach(a=>a.onclick=()=>{ EF.cat=a.dataset.cat; EF.view="all"; EF.st={k:EF.per,d:-1}; viewETFs(); });
+    const ch=[...new Set(shown)].filter(t=>st.map[t]); $("#eopen").textContent=`▶ ${ch.length} charts`;
+    $("#eopen").onclick=()=>{ if(ch.length>400&&!confirm(`Open ${ch.length} charts?`)) return; openChartList(`ETFs · ${EF.view==="hi"?"highlights":EF.view==="bundles"?"bundles":"filtered"}${EF.q?" · “"+EF.q+"”":""}`,ch); };
+    $("#eexp").onclick=()=>saveCSV(`etfs-${E.date}.csv`,[["Ticker","Name","Category","Issuer","Leverage","Income","Underlying","Price","1D %","1W %","1M %","3M %","6M %","YTD %","1Y %","From 52w high %","Volatility %","Max drop 1Y %","$M per day","Trend","Decay 3M pts"],
+      ...F.filter(f=>ok(f)&&qm(f,EF.q)).map(f=>[f.t,f.n,f.cat,f.is,f.lev,f.inc?"yes":"",f.u||"",f.px,f.d1,f.w1,f.m1,f.m3,f.m6,f.ytd,f.y1,f.hi,f.vol,f.dd,f.adv,f.tr,f.dec??""])]);
+  };
+  document.querySelectorAll("#ev button").forEach(b=>b.onclick=()=>{ EF.view=b.dataset.v; document.querySelectorAll("#ev button").forEach(x=>x.classList.toggle("on",x===b)); draw(); });
+  let qt; $("#eq").oninput=e=>{ clearTimeout(qt); qt=setTimeout(()=>{ EF.q=e.target.value.trim(); EF.blim=30; draw(); },200); };
+  for(const [id,k] of [["#ecat","cat"],["#eiss","iss"],["#elev","lev"],["#eadv","adv"],["#eper","per"]]) $(id).onchange=e=>{ EF[k]=e.target.value; if(k==="per") EF.st={k:EF.per,d:-1}; EF.blim=30; draw(); };
+  draw();
+}
+
 /* ------------------------------------------------------------------ router */
 async function route(){
   let [r,arg,arg2]=(location.hash.slice(1)||"portfolio").split("/"); if(r==="zpf") r="portfolio";
@@ -1282,7 +1391,7 @@ async function route(){
   if(PF.eq&&r!=="backtest"){ PF.eq.destroy(); PF.eq=null; }
   try{
     if(r==="scanner") await viewScanner(); else if(r==="chart") await viewChart(arg&&decodeURIComponent(arg),arg2);
-    else if(r==="watchlist") await viewWatchlist(); else if(r==="download") await viewDownload(); else if(r==="sectors") await viewSectors(arg==="group"?decodeURIComponent(arg2||""):""); else if(r==="rotation") await viewRotation(); else if(r==="zacks") await viewZacks(); else if(r==="backtest") await viewPortfolio(); else await viewZPortfolio();
+    else if(r==="watchlist") await viewWatchlist(); else if(r==="download") await viewDownload(); else if(r==="sectors") await viewSectors(arg==="group"?decodeURIComponent(arg2||""):""); else if(r==="rotation") await viewRotation(); else if(r==="zacks") await viewZacks(); else if(r==="etfs") await viewETFs(arg); else if(r==="backtest") await viewPortfolio(); else await viewZPortfolio();
   }catch(e){ console.error(e); $("#main").innerHTML=`<div class="empty">Could not load this page (${esc(e.message)}).</div>`; }
 }
 window.addEventListener("hashchange",route);

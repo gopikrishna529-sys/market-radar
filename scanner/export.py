@@ -49,8 +49,11 @@ def build_site(w, ind):
     c = w["close"]
     tick = load_all_tickers().drop_duplicates("ticker").set_index("ticker")
     last, avgv = c.iloc[-1], ind["avg_vol"].iloc[-1]
+    fundtype = tick["type"].isin(["ETF", "ETV", "ETN", "ETS"]) if "type" in tick else None
+    minv = lambda t: (ch.get("min_avg_volume_etf", 5000) if fundtype is not None and bool(fundtype.get(t, False))
+                      else ch.get("min_avg_volume", 50000))
     stocks = [t for t in c.columns if t in tick.index
-              and last.get(t, 0) >= ch.get("min_price", 1) and avgv.get(t, 0) >= ch.get("min_avg_volume", 50000)]
+              and last.get(t, 0) >= ch.get("min_price", 1) and avgv.get(t, 0) >= minv(t)]
     etfs = ([CONFIG["relative_strength"]["benchmark"]] + list(CONFIG["sectors"]) + list(CONFIG.get("industries") or {})
             + list(ch.get("extra_tickers", [])))
     chart_set = list(dict.fromkeys(stocks + [e for e in etfs if e in c.columns]))
@@ -120,6 +123,11 @@ def build_site(w, ind):
     (data / "etfs.json").write_text(jsonsafe.dumps(
         {etf: {"name": name, "tickers": (h.get(etf) or {}).get("tickers"), "date": (h.get(etf) or {}).get("date"),
                "source": (h.get(etf) or {}).get("source")} for etf, name in funds().items()}, separators=(",", ":")))
+    try:                                                    # ETF tab: every fund with category, leverage, performance
+        from .etfs import build as build_etfs
+        build_etfs(w, ind, data / "etfs_all.json")
+    except Exception as e:
+        print(f"ETF tab: skipped ({e})")
     zp = ROOT / "data" / "zportfolio.json"                  # Zacks portfolio (tracked forward, see zportfolio.py)
     if zp.exists():
         (data / "zportfolio.json").write_text(zp.read_text())
@@ -178,7 +186,7 @@ def _merge_screens(z):
 
 def _profile(t, prof, ptype, pexch, last, EXCHANGES):
     """type, exchange, sector, industry, market cap ($M), shares outstanding (M), country."""
-    ty = {"CS": "Stock", "ADRC": "ADR", "ETF": "ETF", "ETV": "ETF", "ETN": "ETN"}.get(ptype.get(t), "ETF" if t in
+    ty = {"CS": "Stock", "ADRC": "ADR", "ETF": "ETF", "ETV": "ETF", "ETS": "ETF", "ETN": "ETN"}.get(ptype.get(t), "ETF" if t in
          (list(CONFIG["sectors"]) + list(CONFIG.get("industries") or {}) + ["SPY", "QQQ", "IWM", "DIA", "TLT", "GLD"]) else "Stock")
     code = pexch.get(t)
     code = code if isinstance(code, str) else ""           # blank exchange in the ticker list -> ""

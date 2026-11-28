@@ -282,7 +282,7 @@ def load_tickers():
         return pd.DataFrame(columns=["ticker", "name", "type", "exchange"])
     t = pd.read_csv(f, dtype={"ticker": str})
     if CONFIG["universe"].get("exclude_leveraged_etfs", True) and "type" in t:
-        fund = t["type"].isin(["ETF", "ETV", "ETN"])
+        fund = t["type"].isin(["ETF", "ETV", "ETN", "ETS"])
         lev = t["name"].fillna("").str.contains(LEVERAGED, regex=True)
         t = t[~(fund & lev)]
     return t

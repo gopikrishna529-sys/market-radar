@@ -15,7 +15,7 @@ history:
 
 # Which stocks to scan
 universe:
-  ticker_types: ["CS", "ADRC", "ETF", "ETV"]   # common stocks, ADRs, ETFs and ETF-like funds (e.g. GLD)
+  ticker_types: ["CS", "ADRC", "ETF", "ETV", "ETS", "ETN"]   # stocks, ADRs, ETFs, ETF-like funds (GLD), single-stock ETFs, ETNs
   exclude_leveraged_etfs: true   # drop 2x/3x leveraged and inverse ETFs (they decay over time by design)
   # Liquidity filter (checked on the signal day for the backtest, on the last day for the scanner)
   min_price: 10.0                # ignore stocks below $10
@@ -79,6 +79,7 @@ backtest:
 chart:
   min_price: 1.0
   min_avg_volume: 50000
+  min_avg_volume_etf: 5000       # ETFs get a chart from 5k shares/day (so small funds like NANC can be charted)
   extra_tickers: ["QQQ", "IWM", "DIA", "TLT", "GLD"]
 
 # Report
