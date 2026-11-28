@@ -105,7 +105,8 @@ def summarize(st):
         if prev > avg20 * 1.2 and now < prev * 0.9 and now >= 18:
             out["notes"].append("VIX is falling back after a spike — fear is fading, which often marks a short-term low.")
             score += 1
-        if len(v3) and v3.index[-1] == v.index[-1]:
+        if len(v3) and abs((v3.index[-1] - v.index[-1]).days) <= 4:          # the two files can be a day apart
+            v3 = v3[v3.index <= v.index[-1]]                                  # same day as the VIX reading (or the day before)
             ts = now / v3.iloc[-1]
             out.update(vix3m=round(v3.iloc[-1], 2), term=round(ts, 3))
             if ts >= 1:
