@@ -270,7 +270,7 @@ def _mood_banner(m):
     return (f'<div style="background:{bg};border:2px solid {bd};border-radius:8px;padding:10px 14px;margin:8px 0">'
             f'<div style="font-size:16px;font-weight:800;margin-bottom:4px">{ic} Market alert — mood: {escape(m.get("mood", ""))}</div>'
             + "".join(f'<div style="margin:3px 0">• {x}</div>' for x in lines)
-            + (f'<div style="margin-top:4px;font-size:12px;color:#555">{escape(m["why_text"])}</div>' if m.get("why_text") else "")
+            + '<div style="margin-top:4px;font-size:12px;color:#555">Details and the reasoning are in “Fear gauges” below.</div>'
             + f'<div style="margin-top:6px;font-weight:700">What to do: {escape(m.get("action", ""))}</div></div>')
 
 
@@ -285,28 +285,30 @@ def _mood_section(m, h2, th, td):
     rows = []
     if m.get("vix") is not None:
         z = m.get("vix_zone", "")
-        rows.append(["<b>VIX</b> (expected S&amp;P swings, next 30 days)",
+        rows.append(["<b>😨 Fear index (VIX)</b><br><span style=\"color:#777;font-size:11px\">how big a move traders expect in the S&amp;P 500 over the next month</span>",
                      f'<b style="color:{"#0a7d38" if z in ("calm", "normal") else "#c62828"}">{m["vix"]:.1f}</b> '
                      f'<span style="color:{_color(-(m.get("vix_chg") or 0))}">({m.get("vix_chg", 0):+.1f}%)</span>',
                      f'20-day avg {m.get("vix_avg20", 0):.1f} · higher than {m.get("vix_pctl", 0)}% of the last year · {z}',
-                     "below 20 calm · 20–30 caution · above 30 panic"])
+                     "below 20 calm · 20–30 nervous · above 30 panic" + (f'<br>last 5 days: {" → ".join(f"{x[1]:.1f}" for x in m.get("vix_5d", []))}' if m.get("vix_5d") else "")])
     if m.get("term") is not None:
-        rows.append(["<b>VIX ÷ 3-month VIX</b> (term structure)",
+        rows.append(["<b>⏱ Panic now vs later</b><br><span style=\"color:#777;font-size:11px\">VIX (next 30 days) ÷ VIX3M (next 3 months)</span>",
                      f'<b style="color:{"#c62828" if m["term"] >= 1 else "#0a7d38"}">{m["term"]:.2f}</b>',
-                     f'3-month VIX {m.get("vix3m", 0):.1f}', "below 1 normal · above 1 = stress (backwardation)"])
+                     f'3-month VIX {m.get("vix3m", 0):.1f}', "normally below 1 (people worry more about the distant future) · above 1 = traders scared <i>right now</i>, typical of sell-offs"])
     if m.get("pcr_total") is not None:
-        rows.append(["<b>Put/call ratio — all options</b>", pcr_c(m["pcr_total"]),
-                     f'yesterday {m.get("pcr_prev") or 0:.2f} · 5-day {m.get("pcr_avg5", 0):.2f} · 10-day {m.get("pcr_avg10", 0):.2f}',
+        rows.append(["<b>⚖️ Put/call ratio</b><br><span style=\"color:#777;font-size:11px\">puts traded ÷ calls traded, all US options</span>", pcr_c(m["pcr_total"]),
+                     f'5-day avg {m.get("pcr_avg5", 0):.2f} · 10-day avg {m.get("pcr_avg10", 0):.2f}'
+                     + (f'<br>last 5 days: {" → ".join(f"{x[1]:.2f}" for x in m.get("pcr_5d", []) if x[1])}' if m.get("pcr_5d") else ""),
                      "below 1 = more calls (optimism) · above 1 = more puts (fear / hedging)"])
         if m.get("pcr_equity") is not None:
             rows.append(["<b>Put/call — stock options only</b>", pcr_c(m["pcr_equity"], 0.85, 0.5), "individual-stock traders",
                          "0.5–0.85 normal · above ~1 extreme fear (often near bottoms) · below 0.5 greed"])
-    notes = "".join(f"<li>{escape(x)}</li>" for x in m.get("notes", []))
+    notes = ""
     return (f'<h2 {h2}>😨 Fear gauges — mood: <span style="color:{col}">{escape(m.get("mood", ""))}</span></h2>'
             + _tbl(th, td, ["Gauge", "Now", "Context", "How to read it"], rows)
             + (f'<ul style="margin:4px 0 6px;padding-left:20px;line-height:1.5">{notes}</ul>' if notes else "")
-            + (f'<p style="margin:0 0 4px;font-size:12px;color:#555"><b>Why “{escape(m.get("mood", ""))}”:</b> {escape(m["why_text"])} '
-               '(+2 or more = Bullish · 0 to +1 = Neutral · −1 to −2 = Cautious · −3 or less = Bearish)</p>' if m.get("why_text") else "")
+            + (f'<p style="margin:6px 0 2px"><b>Why “{escape(m.get("mood", ""))}”</b> — {escape(m.get("why_text", ""))}:</p>'
+               + "".join(f'<div style="margin:1px 0 1px 6px">{"✅" if c["ok"] else "❌"} {escape(c["text"])}</div>' for c in m.get("checks", []))
+               if m.get("checks") else "")
             + f'<p style="margin:0 0 6px"><b>What to do:</b> {escape(m.get("action", ""))}</p>'
             '<p style="margin:0 0 10px;font-size:11px;color:#888">Put/call figures are Cboe totals for the previous session'
             + (f' ({fmt_date(m.get("pcr_date"))})' if m.get("pcr_date") else "") + '. Note: “put-call parity” is an option-pricing formula '

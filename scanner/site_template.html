@@ -124,7 +124,17 @@ table.trades tbody tr{cursor:pointer} tr.sel td{background:#1d2a3a!important}
 table:has(tbody td:first-child .tk) td:first-child{max-width:220px;overflow:hidden;text-overflow:ellipsis}
 /* Zacks letter boxes (style scores, rank, brokers) */
 .zb{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 3px;border-radius:4px;font-size:10.5px;font-weight:750;color:#fff;line-height:1;vertical-align:middle;cursor:default}
-.mood{display:inline-block;padding:3px 9px;border-radius:12px;color:#fff;font-size:12px;font-weight:650;white-space:nowrap;margin-left:auto}
+#moodpill{position:relative;margin-left:auto}
+.mpop{display:none;position:absolute;right:0;top:34px;z-index:60;width:min(980px,94vw);background:#121820;border:1px solid #2b3846;border-radius:12px;padding:14px 16px;box-shadow:0 14px 40px rgba(0,0,0,.6);font-size:13px;color:#dfe5ec}
+.mpop.on{display:block}.mpop .mtop{display:flex;justify-content:space-between;gap:10px}.mpop .mt{font-size:17px;font-weight:750}.mpop .mx{background:transparent;border:0;color:#9aa6b4;font-size:16px}
+.mgauge{position:relative;display:flex;height:22px;border-radius:6px;overflow:hidden;margin:12px 0 6px}.mseg{flex:1;color:#fff;font-size:11px;font-weight:650;display:flex;align-items:center;justify-content:center;opacity:.85}
+.mneedle{position:absolute;top:-3px;bottom:-3px;width:4px;margin-left:-2px;background:#fff;border-radius:2px;box-shadow:0 0 0 2px #121820}
+.mact{margin:6px 0;font-size:13.5px}.mchecks{display:grid;grid-template-columns:1fr 1fr;gap:3px 16px;margin:6px 0 10px;font-size:12.5px}
+.mcards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.mcard{background:#0c1117;border:1px solid #222d39;border-radius:9px;padding:9px 10px}
+.mcard .mh{display:flex;justify-content:space-between;gap:6px;margin-bottom:4px;font-size:12.5px}.mcard .mh b{font-size:14px}
+.mdates{display:flex;justify-content:space-between;font-size:10px;color:#7d8896;margin-top:1px}.mex{font-size:11.5px;color:#aab4bf;line-height:1.45;margin-top:5px}
+@media(max-width:900px){.mcards,.mchecks{grid-template-columns:1fr}.mpop{position:fixed;left:3vw;right:3vw;top:60px;width:auto;max-height:80vh;overflow:auto}}
+.mood{display:inline-block;cursor:pointer;padding:3px 9px;border-radius:12px;color:#fff;font-size:12px;font-weight:650;white-space:nowrap}
 #moodpill:empty{display:none}#moodpill+.asof{margin-left:12px}
 .mban{display:flex;gap:12px;align-items:flex-start;max-width:1700px;margin:10px auto 0;padding:10px 14px;border-radius:10px;font-size:13px;line-height:1.5}
 .mban.red{background:#3a1416;border:1px solid #d32f2f;color:#ffd9d6}.mban.amber{background:#3a2c0f;border:1px solid #c48a12;color:#ffe9b8}
@@ -1448,13 +1458,45 @@ J("data/stocks.json").then(s=>$("#asof").textContent="Data to "+fd(s.date)).catc
 /* market mood: pill in the top bar + alert banner (VIX, put/call ratio) */
 J("data/sentiment.json").then(m=>{ if(!m||!m.mood) return;
   const col={Bullish:"#1b8a3a",Neutral:"#3a4654",Cautious:"#c48a12",Bearish:"#d32f2f"}[m.mood]||"#3a4654";
-  const tip=`<b>Market mood: ${esc(m.mood)}</b><br>${m.vix!=null?`VIX ${m.vix} (${m.vix_chg>0?"+":""}${m.vix_chg}%), ${esc(m.vix_zone||"")}<br>`:""}${m.term!=null?`VIX ÷ 3-month VIX ${m.term} ${m.term>=1?"(stress)":"(normal)"}<br>`:""}${m.pcr_total!=null?`Put/call ${m.pcr_total} (5-day avg ${m.pcr_avg5})<br>`:""}${m.vix_5d?`VIX last 5 days: ${m.vix_5d.map(x=>x[1].toFixed(1)).join(" → ")} <b>${m.vix_trend==="rising"?"▲ rising":m.vix_trend==="falling"?"▼ falling":"flat"}</b><br>`:""}${m.pcr_5d?`Put/call last 5 days: ${m.pcr_5d.map(x=>x[1]!=null?(+x[1]).toFixed(2):"–").join(" → ")}<br>`:""}${m.why_text?`<span style="color:#9aa6b4">${esc(m.why_text)}</span><br>`:""}<i>${esc(m.action||"")}</i><br><span style="color:#9aa6b4">Updated once a day after the US close (Cboe data).</span>`;
-  $("#moodpill").innerHTML=`<span class="mood" style="background:${col}" data-tip="${esc(tip)}">${esc(m.mood)}${m.vix!=null?` · VIX ${(+m.vix).toFixed(1)}`:""}${m.pcr_total!=null?` · P/C ${(+m.pcr_total).toFixed(2)}`:""}</span>`;
+  $("#moodpill").innerHTML=`<span class="mood" style="background:${col}" id="moodbtn">${esc(m.mood)}${m.vix!=null?` · VIX ${(+m.vix).toFixed(1)}`:""}${m.pcr_total!=null?` · P/C ${(+m.pcr_total).toFixed(2)}`:""} ▾</span>`;
+  /* --- the mood panel: gauge, checklist and three small charts --- */
+  const spark=(ser,o)=>{ ser=(ser||[]).filter(x=>x[1]!=null); if(ser.length<2) return '<div class="muted" style="font-size:12px">Not enough history yet — builds up daily.</div>';
+    const W=300,H=74,P=4, vals=ser.map(x=>+x[1]), lo=Math.min(...vals,...(o.lines||[]),o.min??Infinity), hi=Math.max(...vals,...(o.lines||[]),o.max??-Infinity), pad=(hi-lo)*.08||1;
+    const y0=lo-pad,y1=hi+pad, X=i=>P+i*(W-2*P)/(ser.length-1), Y=v=>H-P-(v-y0)/(y1-y0)*(H-2*P);
+    let g=(o.zones||[]).map(z=>{ const a=Math.max(y0,z[0]),b=Math.min(y1,z[1]); return b>a?`<rect x="0" y="${Y(b)}" width="${W}" height="${Y(a)-Y(b)}" fill="${z[2]}"/>`:""; }).join("");
+    g+=(o.lines||[]).map(v=>`<line x1="0" x2="${W}" y1="${Y(v)}" y2="${Y(v)}" stroke="#9aa6b4" stroke-dasharray="3 3" stroke-width="1"/><text x="${W-2}" y="${Y(v)-3}" font-size="9" fill="#9aa6b4" text-anchor="end">${v}</text>`).join("");
+    g+=`<polyline fill="none" stroke="${o.color||"#e7ebf0"}" stroke-width="1.8" points="${ser.map((x,i)=>X(i)+","+Y(+x[1])).join(" ")}"/>`;
+    if(o.ser2) g+=`<polyline fill="none" stroke="#8b96a3" stroke-width="1.2" stroke-dasharray="2 2" points="${o.ser2.filter(x=>x[1]!=null).slice(-ser.length).map((x,i)=>X(i)+","+Y(+x[1])).join(" ")}"/>`;
+    const L=ser.at(-1); g+=`<circle cx="${X(ser.length-1)}" cy="${Y(+L[1])}" r="3.2" fill="${o.color||"#fff"}"/>`;
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none">${g}</svg><div class="mdates"><span>${fd(ser[0][0])}</span><span>${fd(L[0])}</span></div>`; };
+  const zV=[[0,20,"rgba(38,166,154,.12)"],[20,30,"rgba(245,166,35,.12)"],[30,99,"rgba(239,83,80,.14)"]];
+  const word=(v,a,b,good,mid,bad)=>v==null?"":v<a?`<b class="up">${good}</b>`:v<b?`<b style="color:#f5a623">${mid}</b>`:`<b class="down">${bad}</b>`;
+  const ord=["Bearish","Cautious","Neutral","Bullish"], gi=ord.indexOf(m.mood);
+  const needle=Math.max(2,Math.min(98,((m.gauge??0)+6)/10*100));
+  const pop=`<div class="mpop" id="moodpop">
+    <div class="mtop"><div><div class="mt">Market mood: <span style="color:${col==="#3a4654"?"#cfd6de":col}">${esc(m.mood)}</span></div><div class="muted" style="font-size:12px">${esc(m.why_text||"")} · updated daily after the US close (Cboe data, last ${fd(m.vix_date||m.pcr_date)})</div></div><button class="mx" id="mpx">✕</button></div>
+    <div class="mgauge"><div class="mseg" style="background:#d32f2f">Bearish</div><div class="mseg" style="background:#c48a12">Cautious</div><div class="mseg" style="background:#3a4654">Neutral</div><div class="mseg" style="background:#1b8a3a">Bullish</div><div class="mneedle" style="left:${needle}%"></div></div>
+    <div class="mact"><b>What to do:</b> ${esc(m.action||"")}</div>
+    <div class="mchecks">${(m.checks||[]).map(c=>`<div>${c.ok?"✅":"❌"} ${esc(c.text)}</div>`).join("")}</div>
+    <div class="mcards">
+      ${m.vix!=null?`<div class="mcard"><div class="mh"><span>😨 Fear index (VIX)</span><span><b>${(+m.vix).toFixed(1)}</b> ${word(m.vix,20,30,"calm","nervous","panic")}</span></div>${spark(m.vix_hist,{zones:zV,lines:[20,30],color:"#f5a623"})}
+        <div class="mex">How big a move traders expect in the S&amp;P 500 over the next month. <b>Under 20</b> calm · <b>20–30</b> nervous · <b>over 30</b> panic. Watch the direction: falling = fear fading.</div></div>`:""}
+      ${m.term!=null?`<div class="mcard"><div class="mh"><span>⏱ Panic now vs later</span><span><b>${(+m.term).toFixed(2)}</b> ${word(m.term,0.95,1,"normal","watch","panic now")}</span></div>${spark(m.term_hist,{zones:[[0,.95,"rgba(38,166,154,.12)"],[.95,1,"rgba(245,166,35,.12)"],[1,3,"rgba(239,83,80,.14)"]],lines:[1],color:"#4c9ffe"})}
+        <div class="mex">VIX (fear for the next 30 days) ÷ VIX3M (fear for the next 3 months). Normally <b>below 1</b> — people worry more about the distant future. <b>Above 1</b> means traders are scared <i>right now</i>, which happens during sell-offs. Dropping back under 1 often marks the worst being over.</div></div>`:""}
+      ${m.pcr_total!=null?`<div class="mcard"><div class="mh"><span>⚖️ Put/call ratio</span><span><b>${(+m.pcr_total).toFixed(2)}</b> ${word(m.pcr_total,0.7,1,"greedy","normal","fearful")}</span></div>${spark(m.pcr_hist,{lines:[1],zones:[[0,.7,"rgba(245,166,35,.10)"],[1,5,"rgba(239,83,80,.12)"]],color:"#c77dff",ser2:(m.pcr_hist||[]).map(x=>[x[0],x[2]])})}
+        <div class="mex">Puts traded ÷ calls traded, all US options (solid line; dotted = stock options only). <b>Below 1</b> more calls = optimism · <b>above 1</b> more puts = fear or hedging. Very low (&lt;0.7) can mean greed near a top; very high spikes often come near bottoms.</div></div>`:""}
+    </div></div>`;
+  $("#moodpill").insertAdjacentHTML("beforeend",pop);
+  { const btn=$("#moodbtn"), p=$("#moodpop"); let t;
+    const open=()=>{ clearTimeout(t); p.classList.add("on"); }, close=()=>{ t=setTimeout(()=>p.classList.remove("on"),250); };
+    btn.addEventListener("mouseenter",open); btn.addEventListener("mouseleave",close); p.addEventListener("mouseenter",open); p.addEventListener("mouseleave",close);
+    btn.addEventListener("click",e=>{ e.stopPropagation(); p.classList.toggle("on"); }); $("#mpx").onclick=e=>{ e.stopPropagation(); p.classList.remove("on"); };
+    document.addEventListener("click",e=>{ if(!p.contains(e.target)) p.classList.remove("on"); }); }
   const key="mr_mb_"+(m.vix_date||"")+(m.pcr_date||"")+m.mood; let seen=false; try{ seen=localStorage.getItem("mr_mb")===key; }catch(e){}
   if((m.alerts&&m.alerts.length||m.changed)&&!seen){ const red=(m.alerts||[]).some(a=>a.level==="red");
     $("#mbanner").innerHTML=`<div class="mban ${red?"red":"amber"}"><div style="flex:1"><b>${red?"🚨":"⚠️"} Market alert — mood: ${esc(m.mood)}</b>${m.changed?` · ${esc(m.changed)}`:""}
       ${(m.alerts||[]).map(a=>`<div>• ${esc(a.text)}</div>`).join("")}${m.vix_5d?`<div>• VIX last 5 days: ${m.vix_5d.map(x=>x[1].toFixed(1)).join(" → ")} (${m.vix_trend})</div>`:""}
-      ${m.why_text?`<div style="opacity:.8;font-size:12px">${esc(m.why_text)}</div>`:""}<div style="margin-top:3px"><b>What to do:</b> ${esc(m.action||"")}</div></div><button id="mbx" data-tip="Hide this alert. It comes back when the next day's VIX / put-call data arrives with an alert, or when the mood changes.">✕</button></div>`;
+      ${m.checks?`<div style="opacity:.85;font-size:12px;margin-top:2px">${m.checks.map(c=>(c.ok?"✅ ":"❌ ")+esc(c.text)).join(" · ")} — <a href="javascript:void 0" onclick="document.getElementById('moodpop').classList.add('on');event.stopPropagation()" style="color:inherit;text-decoration:underline">see charts</a></div>`:""}<div style="margin-top:3px"><b>What to do:</b> ${esc(m.action||"")}</div></div><button id="mbx" data-tip="Hide this alert. It comes back when the next day's VIX / put-call data arrives with an alert, or when the mood changes.">✕</button></div>`;
     $("#mbx").onclick=()=>{ $("#mbanner").innerHTML=""; try{ localStorage.setItem("mr_mb",key); }catch(e){} }; } }).catch(()=>{});
 route();
 </script>
