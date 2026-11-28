@@ -81,7 +81,7 @@ table.trades tbody tr{cursor:pointer} tr.sel td{background:#1d2a3a!important}
 @media(max-width:1450px){.cwrap{grid-template-columns:minmax(0,1fr) 240px}.cinfo2 .nm,.cinfo2 .kv.opt{display:none}.ctb #cq{width:84px}.ctb .sm,.ctb .seg.sm button{padding:3px 7px;font-size:12px}.ctb .sep{display:none}
   header{gap:14px;padding:0 14px}.hsearch input{width:190px!important}nav a{padding:0 8px}}
 .wlp{position:sticky;top:70px;height:calc(100vh - 84px);display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.wlp .hd{padding:10px 10px 8px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:7px}.wlp .hd select,.wlp .hd input{width:100%}
+.wlp .hd{padding:10px 10px 8px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:7px}.wlp .hd select,.wlp .hd input,.wlp .hd .dpbtn{width:100%;text-align:left}
 .wlp .lb{overflow-y:auto;flex:1;outline:none}.wlp .it{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 10px;border-bottom:1px solid #18212b;cursor:pointer;font-size:13px}
 .wlp .it:hover{background:var(--panel2)}.wlp .it.on{background:#1d2a3a;box-shadow:inset 3px 0 0 var(--accent)}.wlp .it b{font-weight:650}.wlp .it>div{min-width:0}.wlp .it .nm3{display:block;color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wlp .it .r{text-align:right;font-variant-numeric:tabular-nums}.wlp .it .r .p,.wlp .it .r .c{display:block}.wlp .it .r .c{font-size:11.5px;margin-top:2px}
@@ -152,6 +152,13 @@ th[draggable=true]{cursor:grab}th.dragover{box-shadow:inset 3px 0 0 var(--accent
 .navmore{position:relative;display:flex}.moremenu{display:none;position:absolute;top:100%;left:0;z-index:70;min-width:200px;background:#121820;border:1px solid #2b3846;border-radius:9px;padding:6px;box-shadow:0 12px 30px rgba(0,0,0,.5);flex-direction:column}
 .navmore.on .moremenu{display:flex}.moremenu a{height:auto!important;padding:9px 12px!important;border-radius:6px;border-bottom:0!important}.moremenu a:hover{background:var(--panel2)}.moremenu a.on{color:var(--accent)}
 @media(max-width:760px){.navmore{display:contents}#morebtn{display:none!important}.moremenu{display:contents!important}.moremenu a{padding:0 11px!important;display:flex;align-items:center}}
+.dpbtn{white-space:nowrap}.calpop{position:fixed;z-index:200;width:282px;background:#121820;border:1px solid #2b3846;border-radius:10px;padding:10px;box-shadow:0 14px 40px rgba(0,0,0,.6);font-size:13px}
+.calh{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}.calh .cn{padding:2px 10px}.calw,.calg{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}
+.calw span{font-size:11px;color:var(--muted)}.calg .cd{padding:5px 0;border:0;background:transparent;color:#4b5663;border-radius:6px;font-size:12.5px}
+.calg .cd.ok{color:var(--text);font-weight:650;cursor:pointer}.calg .cd.ok:hover{background:var(--panel2)}.calg .cd.sel{background:var(--accent)!important;color:#fff}.calg .cd.last{box-shadow:inset 0 -2px 0 #26a69a}
+.calq{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}.calq button{padding:3px 8px;font-size:12px}
+.aisc{display:inline-block;min-width:26px;text-align:center;padding:2px 5px;border-radius:5px;color:#fff;font-weight:750;font-size:12px}.ail{font-size:12px;font-weight:600}
+.aiwhyc{font-size:12px;color:#c8d0da;white-space:normal;display:inline-block;min-width:240px;max-width:380px;line-height:1.4}
 #tipbox{position:fixed;z-index:999;pointer-events:none;max-width:320px;background:#1c2530;color:#e7ebf0;border:1px solid #33414f;border-radius:7px;padding:6px 9px;font-size:12px;line-height:1.45;box-shadow:0 6px 24px rgba(0,0,0,.5);display:none}
 [data-tip]{cursor:default}
 .zbs{display:inline-flex;gap:2px;vertical-align:middle}.zbs .zb{min-width:16px;height:16px;font-size:10px}
@@ -246,6 +253,42 @@ function zBoxes(z,opt={}){
   document.addEventListener("mousemove",e=>{ const el=e.target.closest&&e.target.closest("[data-tip]"); if(el&&box&&box.style.display==="block") show(el,e.clientX,e.clientY); });
   document.addEventListener("touchstart",e=>{ const el=e.target.closest&&e.target.closest("[data-tip]"); if(el){ const t=e.touches[0]; show(el,t.clientX,t.clientY); clearTimeout(tm); tm=setTimeout(hide,2500); } else hide(); },{passive:true});
   addEventListener("scroll",hide,true); })();
+/* calendar date picker: shows dd-MMM-yy on a button; click opens a month calendar where only days with data can be picked */
+function dateBtn(id,value,latest,allLabel){ return `<button class="dpbtn" id="${id}" data-v="${value||""}" type="button">📅 ${value?fd(value)+(value===latest?" (latest)":""):(allLabel||"Pick a date")} ▾</button>`; }
+function datePicker(btn,dates,onPick,allLabel){
+  if(!btn) return; const asc=[...new Set(dates)].sort(), set=new Set(asc);
+  btn.onclick=e=>{ e.stopPropagation(); document.querySelector(".calpop")?.remove();
+    let cur=btn.dataset.v||asc.at(-1), y=+cur.slice(0,4), m=+cur.slice(5,7)-1;
+    const box=document.createElement("div"); box.className="calpop"; document.body.appendChild(box);
+    const r=btn.getBoundingClientRect(); box.style.top=(r.bottom+6)+"px"; box.style.left=Math.max(6,Math.min(innerWidth-292,r.left))+"px";
+    const MON=["January","February","March","April","May","June","July","August","September","October","November","December"];
+    const back=days=>{ const t=new Date(asc.at(-1)); t.setDate(t.getDate()-days); const s2=t.toISOString().slice(0,10); return [...asc].reverse().find(d=>d<=s2)||asc[0]; };
+    const pick=v=>{ box.remove(); btn.dataset.v=v; onPick(v); };
+    const draw=()=>{ const first=new Date(Date.UTC(y,m,1)), off=(first.getUTCDay()+6)%7, n=new Date(Date.UTC(y,m+1,0)).getUTCDate();
+      const minYM=asc[0].slice(0,7), maxYM=asc.at(-1).slice(0,7), ym=`${y}-${String(m+1).padStart(2,"0")}`;
+      let cells=""; for(let k=0;k<off;k++) cells+="<span></span>";
+      for(let d=1;d<=n;d++){ const ds=`${ym}-${String(d).padStart(2,"0")}`, ok=set.has(ds);
+        cells+=`<button type="button" class="cd ${ok?"ok":""} ${ds===btn.dataset.v?"sel":""} ${ds===asc.at(-1)?"last":""}" ${ok?`data-d="${ds}"`:"disabled"}>${d}</button>`; }
+      box.innerHTML=`<div class="calh"><button type="button" class="cn" data-m="-1" ${ym<=minYM?"disabled":""}>‹</button><b>${MON[m]} ${y}</b><button type="button" class="cn" data-m="1" ${ym>=maxYM?"disabled":""}>›</button></div>
+        <div class="calw">${["Mo","Tu","We","Th","Fr","Sa","Su"].map(x=>`<span>${x}</span>`).join("")}</div><div class="calg">${cells}</div>
+        <div class="calq"><button type="button" data-q="0">Latest</button><button type="button" data-q="7">1 week ago</button><button type="button" data-q="30">1 month</button><button type="button" data-q="91">3 months</button>${allLabel?`<button type="button" data-q="all">${esc(allLabel)}</button>`:""}</div>
+        <div class="muted" style="font-size:11px;margin-top:4px">Days with data are bold · ${fd(asc[0])} → ${fd(asc.at(-1))}</div>`;
+      box.querySelectorAll(".cn").forEach(b=>b.onclick=ev=>{ ev.stopPropagation(); m+=+b.dataset.m; if(m<0){m=11;y--;} if(m>11){m=0;y++;} draw(); });
+      box.querySelectorAll(".cd.ok").forEach(b=>b.onclick=()=>pick(b.dataset.d));
+      box.querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>pick(b.dataset.q==="all"?"":b.dataset.q==="0"?asc.at(-1):back(+b.dataset.q))); };
+    draw(); box.onclick=ev=>ev.stopPropagation();
+    setTimeout(()=>document.addEventListener("click",()=>box.remove(),{once:true}),0);
+    document.addEventListener("keydown",ev=>{ if(ev.key==="Escape") box.remove(); },{once:true}); };
+}
+/* AI score per stock: 0 strong short setup … 50 neutral … 100 strong long setup */
+const AIS={};
+async function aiScores(day){ if(!day){ try{ const ix=await J("data/ai/index.json"); day=ix.at(-1).date; }catch(e){ return {}; } }
+  if(!(day in AIS)) AIS[day]=J(`data/ai/scores-${day}.json`).catch(()=>({})); return AIS[day]; }
+const aiCol=s=>s>=80?"#1b8a3a":s>=65?"#43a047":s>=45?"#5b6672":s>=30?"#ef6c00":"#d32f2f";
+function aiTip(v){ return `<b>AI score ${v.s}/100 — ${esc(v.l)}</b>${v.p&&v.p.length?`<br>Setup: ${esc(v.p.join(", "))}`:""}${v.g.length?"<br>"+v.g.map(x=>"✅ "+esc(x)).join("<br>"):""}${v.b.length?"<br>"+v.b.map(x=>"❌ "+esc(x)).join("<br>"):""}<br><span style='color:#9aa6b4'>0 = strong short setup · 50 = neutral · 100 = strong long setup</span>`; }
+function aiBadge(v){ return v?`<span class="aisc" style="background:${aiCol(v.s)}" data-tip="${esc(aiTip(v))}">${v.s}</span> <span class="ail" style="color:${aiCol(v.s)}">${esc(v.l)}</span>`:'<span class="muted" data-tip="Not scored (outside the liquid universe)">–</span>'; }
+function aiWhy(v){ if(!v) return "–"; const ng=v.b.length?1:2, nb=v.g.length?Math.min(2,v.b.length):2; const g=v.g.slice(0,ng).map(x=>`<span class="up">✓</span> ${esc(x.replace(/\s*\(.*?\)/g,""))}`), b=v.b.slice(0,nb).map(x=>`<span class="down">✗</span> ${esc(x.replace(/\s*\(.*?\)/g,""))}`);
+  return `<span class="aiwhyc" data-tip="${esc(aiTip(v))}">${[...g,...b].join("<br>")||"–"}${v.g.length+v.b.length>g.length+b.length?` <span class="muted">+${v.g.length+v.b.length-g.length-b.length} more</span>`:""}</span>`; }
 function money(x){ return x==null||!isFinite(x)?"–":(x<0?"-":"")+"$"+num(Math.abs(x),0); }
 function starHTML(t){ const on=WL.has(t); return `<span class="wl ${on?"on":""}" data-star="${esc(t)}" title="Add to / remove from watchlist">${on?"✓ Watching":"+ Watch"}</span>`; }
 document.addEventListener("click", e => {
@@ -784,7 +827,7 @@ async function renderWLP(cur){
       <optgroup label="Sectors">${Object.entries(SECTOR_ETFS).sort((a,b)=>a[1].localeCompare(b[1])).map(([k,n])=>`<option value="etf:${k}">${esc(n)} (${k})</option>`).join("")}</optgroup>
       <optgroup label="Industries">${Object.entries(INDUSTRY_ETFS).sort((a,b)=>a[1].localeCompare(b[1])).map(([k,n])=>`<option value="etf:${k}">${esc(n)} (${k})</option>`).join("")}</optgroup></select>
     <select id="wlo" title="Sort the list"><option value="">Sort: default (A → Z, ETFs by weight)</option><option value="chg">Sort: today % (best first)</option><option value="m1">Sort: 1 month % (best first)</option><option value="rs">Sort: RS rating (best first)</option><option value="v">Sort: P&amp;L / list % (best first)</option></select>
-    ${isPf?`<select id="wld"><option value="">Any entry date</option>${days.map(d=>`<option value="${d}" ${W.day===d?"selected":""}>Entry ${fd(d)}</option>`).join("")}</select>`:""}
+    ${isPf&&days.length?dateBtn("wld",W.day,null,"Any entry date"):""}
     <input id="wlq" placeholder="Filter" value="${esc(W.q)}" autocomplete="off"></div>
     <div class="lb" id="wlb" tabindex="0"></div><div class="ft" id="wlf"></div>`;
   $("#wls").value=W.src; $("#wlo").value=W.sort||"";
@@ -808,7 +851,7 @@ async function renderWLP(cur){
   const fl=()=>$("#wlb")&&$("#wlb").focus();
   $("#wlo").onchange=e=>{ W.sort=e.target.value; W.scroll=0; renderWLP(cur).then(fl); };
   $("#wls").onchange=e=>{ W.src=e.target.value; W.day=""; W.scroll=0; try{localStorage.setItem("mr_wlsrc",W.src);}catch(_){ } renderWLP(cur).then(fl); };
-  $("#wld")&&($("#wld").onchange=e=>{ W.day=e.target.value; W.scroll=0; renderWLP(cur).then(fl); });
+  datePicker($("#wld"),days,v=>{ W.day=v; W.scroll=0; renderWLP(cur).then(fl); },"Any entry date");
   $("#wlq").oninput=e=>{ W.q=e.target.value; const keep=e.target.selectionStart; W.scroll=0; renderWLP(cur).then(()=>{ const q=$("#wlq"); q.focus(); q.setSelectionRange(keep,keep); }); };
 }
 document.addEventListener("keydown",e=>{                     // ↑ / ↓ step through the side list (like TradingView)
@@ -845,7 +888,7 @@ async function viewChart(ticker,focus){
       <div class="chelp" id="chelp">
         <b>Move</b> drag the chart · sideways swipe · Shift + scroll &nbsp; <b>Zoom</b> mouse wheel · pinch · ＋/－ &nbsp; <b>Price scale</b> scroll or drag the price axis · double-click it = auto<br>
         <b>Reset</b> double-click the chart &nbsp; <b>Measure</b> 📏 or hold Shift and drag &nbsp; <b>Next / previous symbol</b> ↑ ↓ keys or the list on the right<br>
-        <span style="color:#9c6ade">▲ Z BUY / ▼ Z SELL</span> = your Zacks portfolio trades · <b>Rank / Brokers</b> tags = Zacks Rank and broker rating from that day · <span style="color:#26a69a">│</span> / <span style="color:#ef5350">│</span> = upgrade / downgrade ·
+        <span style="color:#b388ff">▲ BOUGHT / ▼ SOLD</span> (purple) = when your Portfolio bought / sold this stock · <b>Rank / Brokers</b> tags = Zacks Rank and broker rating from that day · <span style="color:#26a69a">│</span> / <span style="color:#ef5350">│</span> = upgrade / downgrade ·
         dashed purple line = Zacks price target · green / red shading = EMA uptrend / downtrend (${EMA_TXT})</div>
     </div>
     <div class="cinfo2" id="cinfo"></div>
@@ -872,7 +915,7 @@ async function viewChart(ticker,focus){
       if(sb) z+=`<span class="kv">${sb}</span>`; }
     return `<span class="sym">${esc(ticker)}</span><span class="nm">${esc(s.name||"")}</span>
       <span class="px">${fmtPx(s.close)}</span><span class="${cls(s.chg)}" style="font-weight:600">${pct(s.chg)}</span>${stateHTML(s.state,s.days)}
-      <span class="kv">RS <b>${s.rs??"–"}</b></span><span class="kv opt">vs EMA${EMA.exit} <b class="${cls(s.vs_ema50)}">${pct(s.vs_ema50,1)}</b></span><span class="kv opt">Vol <b>${vol}</b></span>${z}
+      <span class="kv" id="aikv"></span><span class="kv">RS <b>${s.rs??"–"}</b></span><span class="kv opt">vs EMA${EMA.exit} <b class="${cls(s.vs_ema50)}">${pct(s.vs_ema50,1)}</b></span><span class="kv opt">Vol <b>${vol}</b></span>${z}
       ${starHTML(ticker)}`; };
   $("#cinfo").innerHTML=infoLine(null);
   if(!s){ $("#cv").innerHTML=""; return; }
@@ -890,13 +933,14 @@ async function viewChart(ticker,focus){
     let ll=Infinity; for(let k=i-20;k<i;k++) if(l[k]!=null&&l[k]<ll) ll=l[k];                          // close below previous 20-day low
     if(c[i]!=null&&c[i]<ll) boM.push({i,pos:"above",dir:"down",size:4,color:"#ff8a80"}); }
   try{ const zp=await J("data/zportfolio.json"); for(const p of (zp.positions||[]).filter(p=>p.ticker===ticker)){
-      const ei=idx[p.entry_date]; if(ei!=null) markers.push({i:ei,pos:"below",dir:"up",size:7,stroke:true,color:"#b388ff",text:"Z BUY"});
-      const xi=idx[p.exit_date]; if(p.status==="closed"&&xi!=null) markers.push({i:xi,pos:"above",dir:"down",size:7,stroke:true,color:"#b388ff",text:"Z SELL "+pct(p.pnl,1)}); } }catch(e){}
+      const ei=idx[p.entry_date]; if(ei!=null) markers.push({i:ei,pos:"below",dir:"up",size:7,stroke:true,color:"#b388ff",text:"BOUGHT"});
+      const xi=idx[p.exit_date]; if(p.status==="closed"&&xi!=null) markers.push({i:xi,pos:"above",dir:"down",size:7,stroke:true,color:"#b388ff",text:"SOLD "+pct(p.pnl,1)}); } }catch(e){}
   let levels=[], zi=null; try{ const ZI=await zinfoP; zi=ZI[ticker]||null; } catch(e){}
   if(zi){ const last=c.at(-1), lab=(n,v)=>`${n} ${fmtPx(v)} (${v>=last?"+":""}${((v/last-1)*100).toFixed(1)}%)`;
     if(zi.target) levels.push({v:zi.target,color:"#b388ff",label:lab("Target",zi.target)});
     for(const [n,v] of (zi.levels||[])) levels.push({v,color:"#7e57c2",label:lab(n.replace(/zacks\s*/i,""),v)}); }
   $("#cinfo").innerHTML=infoLine(zi);
+  aiScores().then(S=>{ const v=S[ticker]; if(v&&$("#aikv")) $("#aikv").innerHTML=`AI ${aiBadge(v)}`; });
   const {lines:zl,tags:ztags}=zacksHistory(zi,dates);
   const PANES={price:{w:3.2,title:ticker+" · 1D",bands,get markers(){ return markers.concat(CH.hide.zr?[]:ztags,CH.hide.bo?[]:boM,CH.hide.old&&!focus?[]:oldM); },get refs(){ return CH.hide.tgt?[]:levels; },series:[{type:"candle",o,h,l,c,tag:true,tagColor:c.at(-1)>=o.at(-1)?"#26a69a":"#ef5350"},
       ...EP.map((p,k)=>({type:"line",name:"EMA"+p,v:t.e[p],color:EMA_COL[p]||["#00bcd4","#4c9ffe","#f5a623","#ec407a","#c77dff"][k%5],width:1.1+k*.15})),
@@ -971,12 +1015,13 @@ async function viewScanner(){
   const TABS=[["breakouts","Trend + Breakout"],["breakdowns","Downtrend + Breakdown"],["rs_days","Up while SPY down"],["rs_leaders","RS Leaders"],["trend","EMA Trend"]];
   const b=d.benchmark, br=d.breadth;
   m.innerHTML=`<div class="row" style="margin-bottom:12px;justify-content:space-between">
-     <div class="row"><h2>Scanner</h2><select id="sdate">${dates.map(x=>`<option value="${x}" ${x===d.date?"selected":""}>${fd(x)}</option>`).join("")}</select></div>
+     <div class="row"><h2>Scanner</h2>${dateBtn("sdate",d.date,dates[0])}</div>
      <div class="row muted">${b.ticker} <b style="color:var(--text)">${b.close}</b> <span class="${cls(b.chg)}">${pct(b.chg)}</span> · ${d.universe_size} scanned · ${br.pct_in_trend}% in EMA trend · ${br.pct_above_ema200}% above 200 EMA · ${br.new_trend_today} new today</div></div>
    <div class="tabs">${TABS.map(([k,l])=>`<button data-t="${k}" class="${SC.tab===k?"on":""}">${l}<span class="n">${(d[k]||[]).length}</span></button>`).join("")}</div>
    <div class="row" style="margin-bottom:10px"><input id="sq" placeholder="Search ticker or name" value="${esc(SC.q)}" style="width:220px"><button class="pri" id="sopen" title="Open these stocks on the chart page and step through them with ↓ / ↑">▶ Charts</button><span class="note"><span class="gold">★</span> = RS line at 50-day high · click a ticker for its chart · “+ Watch” adds it to your watchlist</span></div>
    <div class="card" style="padding:4px 8px"><div class="tbl-wrap" id="stbl"></div></div>`;
-  $("#sdate").onchange=async e=>{SC.data=await J(`data/scans/${e.target.value}.json`); viewScanner();};
+  datePicker($("#sdate"),dates,async v=>{ SC.data=await J(`data/scans/${v}.json`); viewScanner(); });
+  SC.ai=await aiScores(d.date);
   document.querySelectorAll(".tabs button").forEach(x=>x.onclick=()=>{SC.tab=x.dataset.t;SC.sort=null;viewScanner();});
   $("#sq").oninput=e=>{SC.q=e.target.value;drawScan();}; await stocks(); drawScan();
   $("#sopen").onclick=()=>openChartList(`Scanner ${fd(d.date)} · ${(TABS.find(t=>t[0]===SC.tab)||[,""])[1]}${SC.q?" · “"+SC.q+"”":""}`,SC.shown||[]);
@@ -985,9 +1030,11 @@ function drawScan(){
   const d=SC.data; if(SC.tab==="rs_days"&&d.benchmark.chg>=0){ SC.shown=[]; $("#sopen")&&($("#sopen").textContent="▶ 0 charts"); $("#stbl").innerHTML=`<div class="empty">${d.benchmark.ticker} was not down on ${fd(d.date)}.</div>`; return; }
   const q=SC.q.toUpperCase(); let rows=(d[SC.tab]||[]).filter(r=>!q||r.ticker.includes(q)||(r.name||"").toUpperCase().includes(q)); if(SC.sort) rows=sortRows(rows,SC.sort,SC.dir);
   SC.shown=rows.map(r=>r.ticker); $("#sopen")&&($("#sopen").textContent=`▶ ${rows.length} chart${rows.length===1?"":"s"}`);
-  const cols=[["ticker","Ticker"],["name","Name"],["close","Close"],["chg","Chg %"],["rs","RS"],["vol_ratio","Vol ×"],["days_trend","Days in trend"],["ext_ema20","% from EMA20"],["perf_1m","1M %"]];
+  rows=rows.map(r=>({...r,ai:(SC.ai&&SC.ai[r.ticker]||{}).s??null})); if(SC.sort==="ai") rows=sortRows(rows,"ai",SC.dir);
+  const cols=[["ticker","Ticker"],["ai","AI score"],["aiw","Good / bad"],["name","Name"],["close","Close"],["chg","Chg %"],["rs","RS"],["vol_ratio","Vol ×"],["days_trend","Days in trend"],["ext_ema20","% from EMA20"],["perf_1m","1M %"]];
   $("#stbl").innerHTML=rows.length?`<table><thead><tr>${cols.map(([k,l])=>`<th data-k="${k}">${l}${SC.sort===k?(SC.dir>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>
-    <td><span class="tk" data-tk="${esc(r.ticker)}">${esc(r.ticker)}</span>${r.rs_high?' <span class="gold" title="RS line at 50-day high">★</span>':""} ${starHTML(r.ticker)}</td>
+    <td><span class="tk" data-tk="${esc(r.ticker)}">${esc(r.ticker)}</span>${r.rs_high?' <span class="gold" data-tip="RS line at a 50-day high">★</span>':""} ${starHTML(r.ticker)}</td>
+    <td>${aiBadge(SC.ai&&SC.ai[r.ticker])}</td><td>${aiWhy(SC.ai&&SC.ai[r.ticker])}</td>
     <td class="nm">${esc(r.name)}</td><td>${r.close}</td><td class="${cls(r.chg)}">${pct(r.chg)}</td><td>${r.rs??"–"}</td><td>${r.vol_ratio??"–"}</td>
     <td>${r.days_trend}</td><td>${r.ext_ema20==null?"–":r.ext_ema20+"%"}</td><td class="${cls(r.perf_1m)}">${pct(r.perf_1m,1)}</td></tr>`).join("")}</tbody></table>`:'<div class="empty">No stocks match.</div>';
   document.querySelectorAll("#stbl th").forEach(th=>th.onclick=()=>{const k=th.dataset.k; SC.dir=SC.sort===k?-SC.dir:1; SC.sort=k; drawScan();});
@@ -1270,7 +1317,7 @@ async function viewZPortfolio(){
     Sell at the next open after a close below EMA${EMA.exit}, or when the Zacks Rank falls to ${R.sell_rank??4} or worse.
     ${money(R.dollars_per_trade??10000)} per position, ${R.cost_pct??0.05}% cost per buy/sell. Tracked forward from its first day (no Zacks history before that). The old EMA strategy is under <a href="#backtest">Backtest (old)</a>.`;
   if(!z){ $("#main").innerHTML=`<h2>Portfolio</h2><div class="card"><p class="note">${rulesTxt}</p><div class="empty">Tracking starts with the next daily scan.</div></div>`; return; }
-  await stocks();
+  await stocks(); const AIS_=await aiScores();
   const P=z.positions||[], isOpen=p=>p.status==="open"||p.status==="exit next open";
   const open=P.filter(isOpen), pend=P.filter(p=>p.status==="pending"), closed=P.filter(p=>p.status==="closed");
   const D=R.dollars_per_trade||10000, upl=open.reduce((a,p)=>a+(p.pnl||0)/100*D,0), rpl=closed.reduce((a,p)=>a+(p.pnl||0)/100*D,0);
@@ -1286,7 +1333,7 @@ async function viewZPortfolio(){
       ${kp("Total P&amp;L",`${money(upl+rpl)}`,`on ${money(D)} per position`,cls(upl+rpl))}</div>
     <div class="card"><div class="row" style="gap:10px">
       <div class="seg" id="zpshow">${[["current",`Open + orders (${open.length+pend.length})`],["open",`Open (${open.length})`],["pending",`Buy orders (${pend.length})`],["closed",`Closed (${closed.length})`],["all",`All (${P.length})`]].map(([k,l])=>`<button data-s="${k}" class="${ZP.show===k?"on":""}">${l}</button>`).join("")}</div>
-      <label class="muted">Entry date <select id="zpday"><option value="">All dates</option>${days.map(d=>`<option value="${d}" ${ZP.day===d?"selected":""}>${fd(d)} (${cnt(d)})</option>`).join("")}</select></label>
+      <label class="muted">Entry date ${dateBtn("zpday",ZP.day,null,"All dates")}</label>
       <input id="zpq" placeholder="Filter ticker or company" style="width:200px" value="${esc(ZP.q)}">
       <button class="pri" id="zpopen" title="Open these positions on the chart page and step through them">▶ Charts</button><span class="muted" id="zpsum"></span></div></div>
     <div class="card"><div class="tbl-wrap scroll" id="zptbl" style="max-height:720px"></div></div>
@@ -1295,6 +1342,7 @@ async function viewZPortfolio(){
   const rk=(a,b)=>a==null?"–":(b!=null&&b!==a?`<span style="color:${b<a?"#26a69a":"#ef5350"}">${a}→${b}</span>`:`${a}`);
   const ST=p=>p.status==="pending"?`<span class="muted">buy next open</span>`:p.status==="exit next open"?`<span class="gold">sell next open</span>`:p.status==="closed"?"closed":p.status==="open"?`<span class="up">open</span>`:esc(p.status);
   const cols=[["ticker","Ticker",p=>`<span class="tk" data-tk="${esc(p.ticker)}">${esc(p.ticker)}</span> <span class="muted">${esc(nm(p.ticker))}</span>`],
+    ["ai","AI score",p=>aiBadge(AIS_[p.ticker])],["aiw","Good / bad",p=>aiWhy(AIS_[p.ticker])],
     ["status","Status",ST],["entry_date","Entry date",p=>p.entry_date?fd(p.entry_date):`<span class="muted">next open</span>`],["entry","Entry",p=>fmtPx(p.entry)],
     ["exit_date","Exit date",p=>fd(p.exit_date)],["now","Last / exit",p=>fmtPx(p.status==="closed"?p.exit:p.last)],
     ["pnl","P&amp;L",p=>p.pnl==null?"–":`<b class="${cls(p.pnl)}">${pct(p.pnl)}</b>`],["days","Days",p=>p.days??"–"],
@@ -1303,7 +1351,7 @@ async function viewZPortfolio(){
     ["signal_date","Signal",p=>fd(p.signal_date)],["reason","Sell reason",p=>esc(p.reason||"")]];
   const filt=()=>P.filter(p=>(ZP.show==="all"||(ZP.show==="current"?(isOpen(p)||p.status==="pending"):ZP.show==="open"?isOpen(p):p.status===ZP.show))
       &&(!ZP.day||p.entry_date===ZP.day)&&matchQ(ZP.q,p.ticker,nm(p.ticker)));
-  const draw=()=>{ const rows=filt().map(p=>({...p,now:p.status==="closed"?p.exit:p.last})), srt=sortRows(rows,ZP.st.k,ZP.st.d);
+  const draw=()=>{ const rows=filt().map(p=>({...p,now:p.status==="closed"?p.exit:p.last,ai:(AIS_[p.ticker]||{}).s??null})), srt=sortRows(rows,ZP.st.k,ZP.st.d);
     ZP.shown=srt.map(p=>p.ticker); $("#zpopen").textContent=`▶ ${new Set(ZP.shown).size} charts`;
     $("#zpopen").onclick=()=>openChartList(`Portfolio · ${$("#zpshow button.on")?.textContent.replace(/\s*\(\d+\)/,"")||"positions"}${ZP.day?" · entry "+fd(ZP.day):""}`,ZP.shown);
     const wp=rows.filter(p=>p.pnl!=null), av=wp.length?wp.reduce((a,p)=>a+p.pnl,0)/wp.length:null;
@@ -1312,7 +1360,8 @@ async function viewZPortfolio(){
       :`<div class="empty">${ZP.day?`No positions with entry date ${fd(ZP.day)} for this view.`:ZP.show==="open"&&pend.length?"No open positions yet — the buy orders fill at the next open.":"Nothing to show."}</div>`;
     $("#zptbl").querySelectorAll("th").forEach(h=>h.onclick=()=>{ ZP.st.d=ZP.st.k===h.dataset.k?-ZP.st.d:-1; ZP.st.k=h.dataset.k; draw(); }); };
   document.querySelectorAll("#zpshow button").forEach(x=>x.onclick=()=>{ ZP.show=x.dataset.s; document.querySelectorAll("#zpshow button").forEach(y=>y.classList.toggle("on",y===x)); draw(); });
-  $("#zpday").onchange=e=>{ ZP.day=e.target.value; if(ZP.day&&ZP.show==="pending"){ ZP.show="all"; document.querySelectorAll("#zpshow button").forEach(y=>y.classList.toggle("on",y.dataset.s==="all")); } draw(); };
+  datePicker($("#zpday"),days.length?days:[z.data_date],v=>{ ZP.day=v; $("#zpday").innerHTML=`📅 ${v?fd(v)+" ("+cnt(v)+")":"All dates"} ▾`; zpDayChanged(); },"All dates");
+  const zpDayChanged=()=>{ if(ZP.day&&ZP.show==="pending"){ ZP.show="all"; document.querySelectorAll("#zpshow button").forEach(y=>y.classList.toggle("on",y.dataset.s==="all")); } draw(); };
   $("#zpq").oninput=e=>{ ZP.q=e.target.value; draw(); };
   $("#zpexp").onclick=()=>saveCSV(`portfolio-${z.data_date}.csv`,[["Ticker","Company","Status","Signal date","Entry date","Entry","Exit date","Exit","Last","P&L %","Days","Sell reason","Rank at signal","Brokers at signal","Upside at signal %","Price target","RS at signal","Rank now","Brokers now"],
     ...filt().map(p=>[p.ticker,nm(p.ticker),p.status,p.signal_date,p.entry_date||"",p.entry??"",p.exit_date||"",p.exit??"",p.last??"",p.pnl??"",p.days??"",p.reason||"",p.rank,p.broker,p.upside,p.target,p.rs,p.rank_now??"",p.broker_now??""])]);
@@ -1464,7 +1513,7 @@ async function viewAI(day){
   const agg=k=>{ const v=all.filter(x=>x.perf[k]&&x.perf[k].n); const n=v.reduce((a,x)=>a+x.perf[k].n,0); return n?{avg:v.reduce((a,x)=>a+x.perf[k].avg*x.perf[k].n,0)/n,win:v.reduce((a,x)=>a+x.perf[k].win*x.perf[k].n,0)/n,n}:null; };
   const AL=agg("long"), AS=agg("short");
   $("#main").innerHTML=`<div class="row" style="margin-bottom:12px;justify-content:space-between"><div class="row"><h2>AI picks</h2>
-      <select id="aid">${dates.map(d=>{ const x=idx.find(y=>y.date===d); return `<option value="${d}" ${d===day?"selected":""}>${fd(d)}${d===dates[0]?" (latest)":""} · ${x.stance}</option>`; }).join("")}</select>
+      ${dateBtn("aid",day,dates[0])}
       <span class="muted">${R.zacks?"":"· no Zacks data for this date (technicals + mood only)"}</span></div>
       <div class="row"><button class="pri" id="aol">▶ Long charts</button><button class="pri" id="aos" style="background:#c0392b;border-color:#c0392b">▶ Short charts</button></div></div>
     <div class="card aiview" style="border-left:4px solid ${scol}">
@@ -1482,7 +1531,7 @@ async function viewAI(day){
     <div class="grid2"><div><h3 class="aisec up">▲ Long ideas <small class="muted">${R.longs.length}</small></h3>${R.longs.map(card).join("")||'<div class="empty">No long setups passed today.</div>'}</div>
       <div><h3 class="aisec down">▼ Short ideas <small class="muted">${R.shorts.length}</small></h3>${R.shorts.map(card).join("")||'<div class="empty">No short setups passed today.</div>'}</div></div>
     <div class="card"><p class="note" style="margin:0"><b>How the AI picks work.</b> Every stock that passes the liquidity filter is scored out of 100 on: EMA trend and how fresh it is, relative strength (RS), 3-month momentum, chart patterns (base breakouts, pullbacks to EMA20/50, bull/bear flags, volatility squeezes, engulfing candles, failed rallies, 20-day breakdowns), volume surges, Zacks Rank / broker rating / price target / VGM, the strength of the stock's sector, and the market mood (VIX, put/call — longs are marked down and shorts up when fear is high). Over-stretched or very volatile stocks lose points. Entry is a stop order beyond today's high (long) or low (short); the stop is the 50-day EMA or 2× the average daily range; the target is 2× the risk. Click a card for the reasons. It is a rules-based model, not financial advice — use it as a shortlist and check each chart.</p></div>`;
-  $("#aid").onchange=e=>{ location.hash="#ai/"+e.target.value; };
+  datePicker($("#aid"),dates,v=>{ location.hash="#ai/"+v; });
   $("#aith").onclick=()=>{ const d=$("#aitd"); d.style.display=d.style.display==="none"?"":"none"; };
   $("#aol").onclick=()=>openChartList(`AI longs ${fd(day)}`,R.longs.map(p=>p.t).filter(t=>st.map[t]));
   $("#aos").onclick=()=>openChartList(`AI shorts ${fd(day)}`,R.shorts.map(p=>p.t).filter(t=>st.map[t]));

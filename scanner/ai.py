@@ -95,6 +95,43 @@ def _mood_at(day):
     return {k: m.get(k) for k in ("mood", "vix", "vix_chg", "term", "pcr_total", "pcr_avg5", "action", "checks", "why_text")}
 
 
+def _verdict(lsc, ssc, r, z, ext, atrp, sr, nsec, sname, lt, st):
+    """One easy number per stock: 0 (strong short setup) … 50 (neutral) … 100 (strong long setup), with the good and bad points."""
+    good, bad, pats = [], [], []
+    if lsc:
+        s, why, pats = lsc
+        score = 50 + max(0, s) / 2
+        for w in why:
+            (bad if w.startswith("⚠") else good).append(w.lstrip("⚠ ").strip())
+    elif ssc:
+        s, why, pats = ssc
+        score = 50 - max(0, s) / 2
+        for w in why:                                   # a short setup's reasons are bad news for a holder
+            (good if w.startswith("⚠") else bad).append(w.lstrip("⚠ ").strip())
+    else:
+        score = 50.0
+        bad.append("No clear trend — the EMAs are mixed")
+        if np.isfinite(r):
+            score += (r - 50) * 0.3
+            (good if r >= 70 else bad if r <= 30 else []).append(f"RS {int(r)} ({'stronger' if r >= 50 else 'weaker'} than {int(r if r >= 50 else 100 - r)}% of stocks)")
+        zr = z.get("rank")
+        if zr:
+            score += {1: 6, 2: 3, 3: 0, 4: -3, 5: -6}[zr]
+            if zr <= 2:
+                good.append(f"Zacks Rank #{zr}")
+            elif zr >= 4:
+                bad.append(f"Zacks Rank #{zr}")
+        if sr and sr <= 3:
+            good.append(f"Leading sector ({sname})")
+        elif sr and sr > nsec - 3:
+            bad.append(f"Weak sector ({sname})")
+        score = max(30, min(70, score))
+    score = int(round(max(1, min(99, score))))
+    label = ("Strong long setup" if score >= 80 else "Bullish" if score >= 65 else "Neutral" if score >= 45
+             else "Bearish" if score >= 30 else "Strong short setup")
+    return {"s": score, "l": label, "g": good[:5], "b": bad[:5], "p": pats}
+
+
 def picks_for(P, i, sector_of_t, zi, mood):
     c, h, l, o = P["c"], P["h"], P["l"], P["o"]
     day = c.index[i]
@@ -114,7 +151,7 @@ def picks_for(P, i, sector_of_t, zi, mood):
     E9, E20, E50, E200 = row("e9"), row("e20"), row("e50"), row("e200")
     LT, ST = row("lt"), row("st")
     pH, pL, pO, pC = prev["h"], prev["l"], prev["o"], prev["c"]
-    longs, shorts = [], []
+    longs, shorts, allsc = [], [], {}
     for t in uni:
         cl, a = C.get(t), A.get(t)
         if not (np.isfinite(cl) and np.isfinite(a) and a > 0):
@@ -131,6 +168,7 @@ def picks_for(P, i, sector_of_t, zi, mood):
         info = dict(t=t, close=_f(cl), atrp=_f(atrp, 1), rs=None if not np.isfinite(r) else int(r),
                     sector=sec_names.get(sec), sector_rank=sr, zr=z.get("rank"), zb=_f(z.get("broker")), vgm=z.get("vgm"),
                     r20=_f(R["r20"].get(t) * 100, 1), ext=_f(ext, 1))
+        lsc = ssc = None
         # ---------------- long side ----------------
         if cl > e50 and e9 > e20 > e50:
             s, why, pat = 0.0, [], []
@@ -215,6 +253,7 @@ def picks_for(P, i, sector_of_t, zi, mood):
                 s -= 5
                 why.append(f"⚠ Very volatile (moves ~{atrp:.0f}% a day)")
             s += mood_adj[0]
+            lsc = (s, why, pat)
             if s >= 50:
                 entry = max(H.get(t), cl) + 0.01
                 stop = max(e50 * 0.99, entry - 2 * a)
@@ -293,6 +332,7 @@ def picks_for(P, i, sector_of_t, zi, mood):
                 s -= 5
                 why.append(f"⚠ Very volatile (moves ~{atrp:.0f}% a day) — squeezes hurt")
             s += mood_adj[1]
+            ssc = (s, why, pat)
             if s >= 50:
                 entry = min(L.get(t), cl) - 0.01
                 stop = min(e50 * 1.01, entry + 2 * a)
@@ -302,10 +342,12 @@ def picks_for(P, i, sector_of_t, zi, mood):
                 shorts.append({**info, "side": "short", "score": int(round(min(99, s))), "pat": pat, "why": why,
                                "entry": _f(entry), "stop": _f(stop), "target": _f(entry - 2 * risk),
                                "risk": _f(risk / entry * 100, 1)})
+        allsc[t] = _verdict(lsc, ssc, r, z, ext, atrp, sr, nsec, sec_names.get(sec), bool(LT.get(t, False)), bool(ST.get(t, False)))
     for L_ in (longs, shorts):
         L_.sort(key=lambda x: -x["score"])
         for x in L_:
             x["grade"] = "A" if x["score"] >= 75 else "B" if x["score"] >= 63 else "C"
+    picks_for.allsc = allsc
     return longs[:MAX_PICKS], shorts[:MAX_PICKS], len(longs), len(shorts), srank, srel
 
 
@@ -368,6 +410,8 @@ def update(w, ind):
     dates = [d.strftime("%Y-%m-%d") for d in c.index]
     have = sorted(p.stem for p in DIR.glob("????-??-??.json"))
     todo = [d for d in dates[-BACKFILL_DAYS:] if d not in have] if len(have) < BACKFILL_DAYS else [d for d in dates[-3:] if d not in have]
+    have_sc = {p.stem[7:] for p in DIR.glob("scores-????-??-??.json")}
+    todo += [d for d in dates[-BACKFILL_DAYS:] if d in have and d not in have_sc and d not in todo]
     try:
         from .profiles import load_profiles
         from .holdings import sector_of
@@ -388,8 +432,11 @@ def update(w, ind):
         rec = {"date": d, "view": _view(d, mood, br, srank, srel, nl, ns), "longs": longs, "shorts": shorts,
                "zacks": bool(zi and any(v.get("rank") for v in zi.values()))}
         (DIR / f"{d}.json").write_text(json.dumps(rec, separators=(",", ":")))
+        (DIR / f"scores-{d}.json").write_text(json.dumps(getattr(picks_for, "allsc", {}), separators=(",", ":")))
     # re-score every saved day with what has happened since, and rebuild the index
     index = []
+    for f in sorted(DIR.glob("scores-????-??-??.json"))[:-60]:        # keep 60 days of per-stock scores
+        f.unlink()
     for f in sorted(DIR.glob("????-??-??.json"))[-120:]:
         rec = _evaluate(P, json.loads(f.read_text()))
         f.write_text(json.dumps(rec, separators=(",", ":")))
