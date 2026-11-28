@@ -76,7 +76,7 @@ def _series(d):
 
 
 def summarize(st):
-    out = {"alerts": [], "notes": []}
+    out = {"alerts": [], "notes": [], "why": []}
     v, v3 = _series((st.get("vix") or {}).get("VIX")), _series((st.get("vix") or {}).get("VIX3M"))
     pc = st.get("pcr") or {}
     days = sorted(pc)
@@ -96,15 +96,29 @@ def summarize(st):
             "elevated": f"VIX {now:.1f} is elevated (20–25) — swings are bigger; use smaller positions.",
             "high": f"VIX {now:.1f} is high (25–30) — fear is building; be careful with new buys and tighten stops.",
             "panic": f"VIX {now:.1f} is above 30 — panic. Avoid new buys until VIX turns down; big bottoms form when it falls back from a spike."}[zone])
-        score += {"calm": 1, "normal": 1, "elevated": -1, "high": -2, "panic": -3}[zone]
+        pts = {"calm": 1, "normal": 1, "elevated": -1, "high": -2, "panic": -3}[zone]
+        score += pts
+        out["why"].append([pts, f"VIX {now:.1f} is {zone}"])
+        last5 = v.iloc[-5:]
+        d5 = last5.iloc[-1] - last5.iloc[0]
+        out["vix_5d"] = [[k.strftime("%Y-%m-%d"), round(x, 2)] for k, x in last5.items()]
+        out["vix_trend"] = "rising" if d5 > 1 else "falling" if d5 < -1 else "flat"
+        out["notes"].insert(0, f"VIX over the last 5 sessions: " + " → ".join(f"{x:.1f}" for x in last5)
+                            + f" ({'rising — fear growing' if d5 > 1 else 'falling — fear easing' if d5 < -1 else 'roughly flat'}).")
         if now / prev - 1 >= 0.15:
             out["alerts"].append({"level": "red", "text": f"VIX jumped {(now / prev - 1) * 100:.0f}% to {now:.1f} — a fear spike. Be cautious today."})
             score -= 1
+            out["why"].append([-1, "VIX jumped 15%+ in a day"])
         elif now > avg20 * 1.2 and now >= 20:
             out["alerts"].append({"level": "amber", "text": f"VIX {now:.1f} is {(now / avg20 - 1) * 100:.0f}% above its 20-day average — fear is rising."})
-        if prev > avg20 * 1.2 and now < prev * 0.9 and now >= 18:
+        if last5.max() >= 28 and now <= last5.max() * 0.8:
+            out["notes"].append(f"VIX has dropped {(1 - now / last5.max()) * 100:.0f}% from its recent spike ({last5.max():.1f}) — fear is easing.")
+            score += 1
+            out["why"].append([1, f"VIX down {(1 - now / last5.max()) * 100:.0f}% from its spike"])
+        elif prev > avg20 * 1.2 and now < prev * 0.9 and now >= 18:
             out["notes"].append("VIX is falling back after a spike — fear is fading, which often marks a short-term low.")
             score += 1
+            out["why"].append([1, "VIX falling back after a spike"])
         if len(v3) and abs((v3.index[-1] - v.index[-1]).days) <= 4:          # the two files can be a day apart
             v3 = v3[v3.index <= v.index[-1]]                                  # same day as the VIX reading (or the day before)
             ts = now / v3.iloc[-1]
@@ -113,6 +127,7 @@ def summarize(st):
                 out["alerts"].append({"level": "red", "text": f"VIX ({now:.1f}) is above 3-month VIX ({v3.iloc[-1]:.1f}) — "
                                       "near-term fear is higher than longer-term (backwardation). This happens in sell-offs; stay defensive."})
                 score -= 2
+                out["why"].append([-2, f"VIX above 3-month VIX ({ts:.2f}) — stress"])
             elif ts >= 0.92:
                 out["notes"].append(f"VIX term structure is flattening ({ts:.2f}) — worth watching; above 1.00 is a stress signal.")
     if days:
@@ -128,6 +143,7 @@ def summarize(st):
             out["alerts"].append({"level": "red", "text": f"Put/call ratio {now:.2f} is above 1 — more puts than calls were traded. "
                                   "Traders are buying protection / betting on a fall. Be cautious with new buys."})
             score -= 2
+            out["why"].append([-2, f"put/call {now:.2f} above 1"])
             if len(t) > 1 and t[-2] and t[-2] <= 1.0:
                 rest = out["alerts"][-1]["text"].split(" — ", 1)[1]
                 out["alerts"][-1]["text"] = f"Put/call ratio crossed above 1 today ({t[-2]:.2f} → {now:.2f}). " + rest[0].upper() + rest[1:]
@@ -137,14 +153,19 @@ def summarize(st):
         elif now:
             out["notes"].append(f"Put/call ratio {now:.2f} is below 1 — more calls than puts, normal optimism.")
             score += 1
+            out["why"].append([1, f"put/call {now:.2f} below 1"])
+        out["pcr_5d"] = [[d, pc[d].get("total")] for d in days[-5:]]
+        out["notes"].insert(1 if out["notes"] else 0, "Put/call over the last 5 sessions: " + " → ".join(f"{x[1]:.2f}" for x in out["pcr_5d"] if x[1]))
         if avg5 > 1.0 and not (now and now > 1.0):
             out["alerts"].append({"level": "amber", "text": f"The 5-day average put/call ratio is {avg5:.2f} (above 1) — fear has been building all week."})
             score -= 1
+            out["why"].append([-1, f"5-day average put/call {avg5:.2f} above 1"])
         if e[-1] and e[-1] > 0.85:
             out["notes"].append(f"Equity put/call {e[-1]:.2f} is high — stock traders are fearful. Extreme fear (above ~1.0) has often marked bottoms (contrarian).")
         elif e[-1] and e[-1] < 0.5:
             out["notes"].append(f"Equity put/call {e[-1]:.2f} is very low — heavy speculation in calls; be careful chasing.")
     out["score"] = score
+    out["why_text"] = (f"Mood score {score:+d} = " + " · ".join(f"{p:+d} {w}" for p, w in out["why"])) if out["why"] else ""
     out["mood"] = ("Bullish" if score >= 2 else "Neutral" if score >= 0 else "Cautious" if score >= -2 else "Bearish")
     out["action"] = {"Bullish": "Conditions support taking new buy signals at normal size.",
                      "Neutral": "Mixed signals — take buys, but prefer the strongest sectors.",
@@ -155,4 +176,6 @@ def summarize(st):
         out["changed"] = f"Market mood changed from {prev['mood']} to {out['mood']}."
     else:
         out["changed"] = prev.get("changed") if prev.get("vix_date") == out.get("vix_date") else None
+    out["alert_key"] = "|".join([out.get("mood", ""), out.get("vix_date") or "", out.get("pcr_date") or ""]
+                                + sorted(a["text"][:40] for a in out["alerts"] if a["level"] == "red"))
     return out

@@ -5,6 +5,7 @@
     python run.py --no-email skip sending the email
     python run.py --site     after a Zacks download: rebuild the website (no email) even without a new day
 """
+import json
 import sys
 
 from scanner.backtest import run_backtest
@@ -34,10 +35,20 @@ def main():
         update_holdings()                           # S&P 500 / Nasdaq 100 / sector ETF members (once a day)
     except Exception as e:
         print(f"holdings: skipped ({e})")
-    def mood(w):
+    def mood(w, daily_email=False):
+        """Refresh VIX / put-call. A new red alert gets its own e-mail unless today's full e-mail carries it."""
         try:
-            from scanner.sentiment import update as update_mood
-            return update_mood([d.strftime("%Y-%m-%d") for d in w["close"].index])
+            from scanner.sentiment import update as update_mood, OUT as MOOD_FILE
+            st = update_mood([d.strftime("%Y-%m-%d") for d in w["close"].index])
+            m = st.get("summary") or {}
+            red = any(a["level"] == "red" for a in m.get("alerts", [])) or bool(m.get("changed"))
+            if red and m.get("alert_key") != st.get("alert_sent"):
+                if not daily_email and "--no-email" not in sys.argv:
+                    from scanner.report import send_alert
+                    send_alert(m)
+                st["alert_sent"] = m.get("alert_key")
+                MOOD_FILE.write_text(json.dumps(st, separators=(",", ":")))
+            return st
         except Exception as e:
             print(f"market mood: skipped ({e})")
             return None
@@ -58,7 +69,7 @@ def main():
           f"{len(result['rs_days'])} up-while-SPY-down, {len(result['rs_leaders'])} RS leaders")
     bt = run_backtest(w, ind)
     zp = zportfolio.update(w, ind)
-    md = mood(w)
+    md = mood(w, daily_email="--no-email" not in sys.argv)
     build_site(w, ind)
     if "--no-email" not in sys.argv:
         try:

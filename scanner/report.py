@@ -270,6 +270,7 @@ def _mood_banner(m):
     return (f'<div style="background:{bg};border:2px solid {bd};border-radius:8px;padding:10px 14px;margin:8px 0">'
             f'<div style="font-size:16px;font-weight:800;margin-bottom:4px">{ic} Market alert — mood: {escape(m.get("mood", ""))}</div>'
             + "".join(f'<div style="margin:3px 0">• {x}</div>' for x in lines)
+            + (f'<div style="margin-top:4px;font-size:12px;color:#555">{escape(m["why_text"])}</div>' if m.get("why_text") else "")
             + f'<div style="margin-top:6px;font-weight:700">What to do: {escape(m.get("action", ""))}</div></div>')
 
 
@@ -304,6 +305,8 @@ def _mood_section(m, h2, th, td):
     return (f'<h2 {h2}>😨 Fear gauges — mood: <span style="color:{col}">{escape(m.get("mood", ""))}</span></h2>'
             + _tbl(th, td, ["Gauge", "Now", "Context", "How to read it"], rows)
             + (f'<ul style="margin:4px 0 6px;padding-left:20px;line-height:1.5">{notes}</ul>' if notes else "")
+            + (f'<p style="margin:0 0 4px;font-size:12px;color:#555"><b>Why “{escape(m.get("mood", ""))}”:</b> {escape(m["why_text"])} '
+               '(+2 or more = Bullish · 0 to +1 = Neutral · −1 to −2 = Cautious · −3 or less = Bearish)</p>' if m.get("why_text") else "")
             + f'<p style="margin:0 0 6px"><b>What to do:</b> {escape(m.get("action", ""))}</p>'
             '<p style="margin:0 0 10px;font-size:11px;color:#888">Put/call figures are Cboe totals for the previous session'
             + (f' ({fmt_date(m.get("pcr_date"))})' if m.get("pcr_date") else "") + '. Note: “put-call parity” is an option-pricing formula '
@@ -669,6 +672,29 @@ def _strategy_section(bt, h2, site):
             f'{_fmt(sp.get("total"), "%")} · max drawdown {_fmt(st.get("max_dd"), "%")} · '
             f'win rate {m.get("trade_stats", {}).get("win_rate", "–")}%'
             + (f' · <a href="{site}#backtest">details</a>' if site else "") + "</p>")
+
+
+def send_alert(m):
+    """Short alert e-mail when the market mood turns red outside the daily e-mail."""
+    user, pwd, to = (os.environ.get(k) for k in ("SMTP_USER", "SMTP_PASSWORD", "EMAIL_TO"))
+    site = os.environ.get("SITE_URL", "")
+    html = ('<div style="font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:700px;color:#222">' + _mood_banner(m)
+            + _mood_section(m, 'style="font-size:16px;margin:18px 0 6px"', 'style="text-align:left;padding:6px 8px;border-bottom:2px solid #ddd;font-size:12px;color:#555"',
+                            'style="padding:5px 8px;border-bottom:1px solid #eee;font-size:13px"')
+            + (f'<p><a href="{site}">Open Market Radar →</a></p>' if site else "") + "</div>")
+    subject = f"🚨 Market alert: mood {m.get('mood')} · VIX {m.get('vix')} · put/call {m.get('pcr_total')}"
+    (ROOT / "results" / "last_alert.html").write_text(html)
+    if not (user and pwd and to):
+        print("alert e-mail not sent: SMTP settings missing")
+        return
+    msg = MIMEMultipart("alternative")
+    msg["Subject"], msg["From"], msg["To"] = subject, user, to
+    msg.attach(MIMEText(html, "html", "utf-8"))
+    with smtplib.SMTP_SSL(os.environ.get("SMTP_HOST", "smtp.gmail.com"), int(os.environ.get("SMTP_PORT", "465")),
+                          context=ssl.create_default_context()) as s:
+        s.login(user, pwd)
+        s.sendmail(user, [a.strip() for a in to.split(",")], msg.as_string())
+    print(f"alert e-mail sent to {to}")
 
 
 def send_email(result, bt=None, zp=None, brief=None):

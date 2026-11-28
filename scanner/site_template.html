@@ -1448,12 +1448,13 @@ J("data/stocks.json").then(s=>$("#asof").textContent="Data to "+fd(s.date)).catc
 /* market mood: pill in the top bar + alert banner (VIX, put/call ratio) */
 J("data/sentiment.json").then(m=>{ if(!m||!m.mood) return;
   const col={Bullish:"#1b8a3a",Neutral:"#3a4654",Cautious:"#c48a12",Bearish:"#d32f2f"}[m.mood]||"#3a4654";
-  const tip=`<b>Market mood: ${esc(m.mood)}</b><br>${m.vix!=null?`VIX ${m.vix} (${m.vix_chg>0?"+":""}${m.vix_chg}%), ${esc(m.vix_zone||"")}<br>`:""}${m.term!=null?`VIX ÷ 3-month VIX ${m.term} ${m.term>=1?"(stress)":"(normal)"}<br>`:""}${m.pcr_total!=null?`Put/call ${m.pcr_total} (5-day ${m.pcr_avg5})<br>`:""}<i>${esc(m.action||"")}</i>`;
+  const tip=`<b>Market mood: ${esc(m.mood)}</b><br>${m.vix!=null?`VIX ${m.vix} (${m.vix_chg>0?"+":""}${m.vix_chg}%), ${esc(m.vix_zone||"")}<br>`:""}${m.term!=null?`VIX ÷ 3-month VIX ${m.term} ${m.term>=1?"(stress)":"(normal)"}<br>`:""}${m.pcr_total!=null?`Put/call ${m.pcr_total} (5-day avg ${m.pcr_avg5})<br>`:""}${m.vix_5d?`VIX last 5 days: ${m.vix_5d.map(x=>x[1].toFixed(1)).join(" → ")} <b>${m.vix_trend==="rising"?"▲ rising":m.vix_trend==="falling"?"▼ falling":"flat"}</b><br>`:""}${m.pcr_5d?`Put/call last 5 days: ${m.pcr_5d.map(x=>x[1]!=null?(+x[1]).toFixed(2):"–").join(" → ")}<br>`:""}${m.why_text?`<span style="color:#9aa6b4">${esc(m.why_text)}</span><br>`:""}<i>${esc(m.action||"")}</i><br><span style="color:#9aa6b4">Updated once a day after the US close (Cboe data).</span>`;
   $("#moodpill").innerHTML=`<span class="mood" style="background:${col}" data-tip="${esc(tip)}">${esc(m.mood)}${m.vix!=null?` · VIX ${(+m.vix).toFixed(1)}`:""}${m.pcr_total!=null?` · P/C ${(+m.pcr_total).toFixed(2)}`:""}</span>`;
   const key="mr_mb_"+(m.vix_date||"")+(m.pcr_date||"")+m.mood; let seen=false; try{ seen=localStorage.getItem("mr_mb")===key; }catch(e){}
   if((m.alerts&&m.alerts.length||m.changed)&&!seen){ const red=(m.alerts||[]).some(a=>a.level==="red");
     $("#mbanner").innerHTML=`<div class="mban ${red?"red":"amber"}"><div style="flex:1"><b>${red?"🚨":"⚠️"} Market alert — mood: ${esc(m.mood)}</b>${m.changed?` · ${esc(m.changed)}`:""}
-      ${(m.alerts||[]).map(a=>`<div>• ${esc(a.text)}</div>`).join("")}<div style="margin-top:3px"><b>What to do:</b> ${esc(m.action||"")}</div></div><button id="mbx" title="Hide until something changes">✕</button></div>`;
+      ${(m.alerts||[]).map(a=>`<div>• ${esc(a.text)}</div>`).join("")}${m.vix_5d?`<div>• VIX last 5 days: ${m.vix_5d.map(x=>x[1].toFixed(1)).join(" → ")} (${m.vix_trend})</div>`:""}
+      ${m.why_text?`<div style="opacity:.8;font-size:12px">${esc(m.why_text)}</div>`:""}<div style="margin-top:3px"><b>What to do:</b> ${esc(m.action||"")}</div></div><button id="mbx" data-tip="Hide this alert. It comes back when the next day's VIX / put-call data arrives with an alert, or when the mood changes.">✕</button></div>`;
     $("#mbx").onclick=()=>{ $("#mbanner").innerHTML=""; try{ localStorage.setItem("mr_mb",key); }catch(e){} }; } }).catch(()=>{});
 route();
 </script>
