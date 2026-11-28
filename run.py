@@ -89,6 +89,10 @@ def main():
                 from scanner.ai import DIR as AI_DIR
                 last = sorted(AI_DIR.glob("????-??-??.json"))[-1]
                 brief["ai"] = json.loads(last.read_text())
+                sc = sorted(AI_DIR.glob("scores-????-??-??.json"))
+                brief["aiscores"] = json.loads(sc[-1].read_text())
+                hp = sorted((AI_DIR / "hist").glob("????-??-??.json"))
+                brief["aiprev"] = json.loads(hp[-2].read_text()) if len(hp) >= 2 else {}
             except Exception:
                 pass
         except Exception as e:                      # the email still goes out without the extras

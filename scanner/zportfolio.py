@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
 STATE = ROOT / "data" / "zportfolio.json"
 
 DEFAULTS = {"max_rank": 2, "max_broker": 2.0, "min_upside_pct": 10.0, "min_rs": 80,
-            "sell_rank": 4, "dollars_per_trade": 10000, "max_zacks_age_days": 5}
+            "sell_rank": 4, "shares_per_trade": 1, "max_zacks_age_days": 5}
 
 
 def settings():
@@ -95,6 +95,10 @@ def update(w, ind):
         st["start"] = dates[-1]
     blocked = set(st.get("blocked", []))
     pos = st["positions"]
+    SH = s["shares_per_trade"]
+    for p in pos:                                           # positions are sized in shares (was $10,000 each)
+        if p.get("sized") != "shares":
+            p["shares"], p["sized"] = SH, "shares"
     zdate = max((v.get("date", "") for v in zi.values()), default="")
     for k in todo:
         d = dates[k]
@@ -104,7 +108,7 @@ def update(w, ind):
             px = o[t].iloc[k] if t in o else np.nan
             if p["status"] == "pending":
                 if np.isfinite(px) and px > 0:
-                    p.update(status="open", entry_date=d, entry=_f(px * (1 + cost), 4))
+                    p.update(status="open", entry_date=d, entry=_f(px * (1 + cost), 4), shares=p.get("shares") or SH)
                 elif k - dates.index(p["signal_date"]) > 3:
                     p.update(status="cancelled", reason="no price after the signal")
             elif p["status"] == "exit next open" and np.isfinite(px) and px > 0:
@@ -143,21 +147,32 @@ def update(w, ind):
                 blocked.add(t)
             print(f"zacks portfolio {d}: {len(cand)} qualify, "
                   f"{sum(1 for p in pos if p['status'] == 'pending' and p['signal_date'] == d)} new buy orders")
-        # 4) daily value: total $ P&L of everything bought so far
-        dl = s["dollars_per_trade"]
-        tot, n_open = 0.0, 0
-        for p in pos:
-            if p["status"] == "closed":
-                tot += p["pnl"] / 100 * dl
-            elif p["status"] in ("open", "exit next open") and p.get("entry"):
-                cl = c[p["ticker"]].iloc[k]
-                if np.isfinite(cl):
-                    tot += (cl / p["entry"] - 1) * dl
-                    n_open += 1
+        # 4) daily value: total $ P&L of everything bought so far (recomputed for every day below)
         bench = CONFIG["relative_strength"]["benchmark"]
         spy = _f(c[bench].iloc[k]) if bench in c else None
-        st["daily"] = [x for x in st.get("daily", []) if x[0] != d] + [[d, round(float(tot), 2), n_open, spy]]
+        st["daily"] = [x for x in st.get("daily", []) if x[0] != d] + [[d, 0.0, 0, spy, 0.0]]
         st["last_day"] = d
+    # recompute every day's value from the positions (shares x price), so a sizing change applies to the whole history
+    kix = {d: k for k, d in enumerate(dates)}
+    for x in st.get("daily", []):
+        k = kix.get(x[0])
+        if k is None:
+            continue
+        tot, n_open, inv = 0.0, 0, 0.0
+        for p in pos:
+            ed, sh = p.get("entry_date"), p.get("shares") or SH
+            if not ed or not p.get("entry") or ed > x[0] or p["status"] == "cancelled":
+                continue
+            if p["status"] == "closed" and p.get("exit_date") and p["exit_date"] <= x[0]:
+                tot += (p["exit"] - p["entry"]) * sh
+                continue
+            t = p["ticker"]
+            cl = c[t].iloc[k] if t in c else np.nan
+            if np.isfinite(cl):
+                tot += (cl - p["entry"]) * sh
+                n_open += 1
+                inv += p["entry"] * sh
+        x[1:] = [round(float(tot), 2), n_open, x[3] if len(x) > 3 else None, round(float(inv), 2)]
     # sector of every position (SPDR sector fund it belongs to)
     try:
         from .profiles import load_profiles
@@ -178,6 +193,7 @@ def update(w, ind):
             p["last"] = _f(cl)
             if p.get("entry") and np.isfinite(cl):
                 p["pnl"] = _f((cl / p["entry"] - 1) * 100)
+                p["usd"] = _f((cl - p["entry"]) * (p.get("shares") or SH))
                 p["days"] = len(dates) - 1 - dates.index(p["entry_date"])
             z = zi.get(t) or {}
             p["rank_now"], p["broker_now"] = z.get("rank"), _f(z.get("broker"))
@@ -187,9 +203,23 @@ def update(w, ind):
             p["to_target"] = _f((tg / cl - 1) * 100, 1) if tg and np.isfinite(cl) and cl > 0 else None
             if np.isfinite(cl) and len(c) > 1 and np.isfinite(c[t].iloc[-2]) and c[t].iloc[-2] > 0:
                 p["chg"] = _f((cl / c[t].iloc[-2] - 1) * 100)
+    for p in pos:
+        sh = p.get("shares") or SH
+        if p["status"] == "closed" and p.get("exit") and p.get("entry"):
+            p["usd"] = _f((p["exit"] - p["entry"]) * sh)
+        if p.get("entry"):
+            p["cost"] = _f(p["entry"] * sh)
+        elif p["status"] == "pending" and p.get("last"):
+            p["cost"] = _f(p["last"] * sh)                # estimate: buys at the next open
+    held = [p for p in pos if p["status"] in ("open", "exit next open")]
+    pend = [p for p in pos if p["status"] == "pending"]
+    st["capital"] = {"invested": _f(sum(p.get("cost") or 0 for p in held)),
+                     "value": _f(sum((p.get("last") or 0) * (p.get("shares") or SH) for p in held)),
+                     "orders": _f(sum(p.get("cost") or 0 for p in pend))}
+    st["capital"]["needed"] = _f((st["capital"]["invested"] or 0) + (st["capital"]["orders"] or 0))
     st["blocked"] = sorted(blocked)
     st["rules"] = {k: s[k] for k in ("max_rank", "max_broker", "min_upside_pct", "min_rs", "sell_rank",
-                                     "dollars_per_trade", "cost_pct")}
+                                     "shares_per_trade", "cost_pct")}
     st["data_date"] = dates[-1]
     STATE.write_text(jsonsafe.dumps(st, indent=1))
     return st

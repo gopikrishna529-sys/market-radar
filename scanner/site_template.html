@@ -157,6 +157,22 @@ th[draggable=true]{cursor:grab}th.dragover{box-shadow:inset 3px 0 0 var(--accent
 .calw span{font-size:11px;color:var(--muted)}.calg .cd{padding:5px 0;border:0;background:transparent;color:#4b5663;border-radius:6px;font-size:12.5px}
 .calg .cd.ok{color:var(--text);font-weight:650;cursor:pointer}.calg .cd.ok:hover{background:var(--panel2)}.calg .cd.sel{background:var(--accent)!important;color:#fff}.calg .cd.last{box-shadow:inset 0 -2px 0 #26a69a}
 .calq{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}.calq button{padding:3px 8px;font-size:12px}
+.aic{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:17px;padding:0 4px;margin-left:5px;border-radius:5px;font-size:10.5px;font-weight:800;color:#fff;vertical-align:middle;line-height:1;cursor:default;box-shadow:0 0 0 1px rgba(255,255,255,.12) inset}
+.aic i{font-style:normal;font-size:8px;font-weight:700;opacity:.8;margin-right:2px;letter-spacing:.2px}.aic.big{height:20px;font-size:12px;padding:0 7px;margin-left:2px}
+.kpi-hi{border-color:#f5c54266!important;background:linear-gradient(160deg,#2a230e,#151b23 60%)!important}.kpi-hi .v{color:var(--gold)}
+/* ---- visual polish */
+header{background:linear-gradient(90deg,#0c1421 0%,#0f1a2b 55%,#0c1421 100%);border-bottom:1px solid #1d2a3b;box-shadow:0 1px 0 rgba(43,127,255,.25),0 6px 18px rgba(0,0,0,.35)}
+.brand{display:flex;align-items:center;gap:9px;color:var(--text);padding:5px 10px 5px 4px;margin-left:-4px;border-radius:10px;transition:background .15s}
+.brand:hover{background:rgba(43,127,255,.12)}.brand .bt{color:var(--text);font-weight:800;font-size:17.5px;letter-spacing:.3px}
+.brand .bt span{background:linear-gradient(90deg,#4c9ffe,#00e5a8);-webkit-background-clip:text;background-clip:text;color:transparent}
+.logo{width:32px;height:32px;filter:drop-shadow(0 0 6px rgba(43,127,255,.45))}.logo .sweep{transform-origin:20px 20px;animation:sweep 4s linear infinite}
+@keyframes sweep{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.logo .sweep{animation:none}}
+nav a{transition:color .15s}nav a.on{color:#fff;border-bottom:2px solid transparent;border-image:linear-gradient(90deg,#4c9ffe,#00e5a8) 1;text-shadow:0 0 12px rgba(76,159,254,.45)}
+.card{background:linear-gradient(180deg,#141c27 0%,#111821 100%);box-shadow:0 1px 0 rgba(255,255,255,.035) inset,0 10px 28px rgba(0,0,0,.28)}
+.kpi{background:linear-gradient(165deg,#172231 0%,#121922 70%);box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 6px 18px rgba(0,0,0,.25);border-top:2px solid #2b7fff55}
+.kpi .v.up{text-shadow:0 0 14px rgba(38,166,154,.35)}.kpi .v.down{text-shadow:0 0 14px rgba(239,83,80,.35)}
+button.pri{background:linear-gradient(135deg,#3d8bff,#2563eb);border-color:#3d8bff;box-shadow:0 4px 14px rgba(37,99,235,.35)}button.pri:hover{filter:brightness(1.1)}
+tbody tr:hover td{background:#1a2533}
 .aisc{display:inline-block;min-width:26px;text-align:center;padding:2px 5px;border-radius:5px;color:#fff;font-weight:750;font-size:12px}.ail{font-size:12px;font-weight:600}
 .aiwhyc{font-size:12px;color:#c8d0da;white-space:normal;display:inline-block;min-width:240px;max-width:380px;line-height:1.4}
 #tipbox{position:fixed;z-index:999;pointer-events:none;max-width:320px;background:#1c2530;color:#e7ebf0;border:1px solid #33414f;border-radius:7px;padding:6px 9px;font-size:12px;line-height:1.45;box-shadow:0 6px 24px rgba(0,0,0,.5);display:none}
@@ -183,7 +199,13 @@ th[draggable=true]{cursor:grab}th.dragover{box-shadow:inset 3px 0 0 var(--accent
 </head>
 <body>
 <header>
-  <div class="brand">Market <span>Radar</span></div>
+  <a class="brand" href="#portfolio" title="Market Radar — home (your portfolio)">
+    <svg class="logo" viewBox="0 0 40 40" aria-hidden="true"><defs><radialGradient id="lg" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#14324f"/><stop offset="1" stop-color="#0a1726"/></radialGradient>
+      <linearGradient id="sw" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#00e5a8" stop-opacity="0"/><stop offset="1" stop-color="#00e5a8" stop-opacity=".75"/></linearGradient></defs>
+      <circle cx="20" cy="20" r="19" fill="url(#lg)" stroke="#2b7fff" stroke-width="1.4"/><circle cx="20" cy="20" r="12.5" fill="none" stroke="#2b7fff" stroke-opacity=".45"/><circle cx="20" cy="20" r="6" fill="none" stroke="#2b7fff" stroke-opacity=".45"/>
+      <g class="sweep"><path d="M20 20 L20 1 A19 19 0 0 1 36.5 10.5 Z" fill="url(#sw)"/></g>
+      <polyline points="7,27 13,23 18,25 24,16 29,18 34,10" fill="none" stroke="#00e5a8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="34" cy="10" r="2.4" fill="#fff"/></svg>
+    <span class="bt">Market <span>Radar</span></span></a>
   <nav id="nav">
     <a href="#portfolio" data-r="portfolio">Portfolio</a>
     <a href="#ai" data-r="ai">AI Picks</a>
@@ -287,9 +309,16 @@ async function aiScores(day){ if(!day){ try{ const ix=await J("data/ai/index.jso
 const aiCol=s=>s>=80?"#1b8a3a":s>=65?"#43a047":s>=45?"#5b6672":s>=30?"#ef6c00":"#d32f2f";
 function aiTip(v){ return `<b>AI score ${v.s}/100 — ${esc(v.l)}</b>${v.p&&v.p.length?`<br>Setup: ${esc(v.p.join(", "))}`:""}${v.g.length?"<br>"+v.g.map(x=>"✅ "+esc(x)).join("<br>"):""}${v.b.length?"<br>"+v.b.map(x=>"❌ "+esc(x)).join("<br>"):""}<br><span style='color:#9aa6b4'>0 = strong short setup · 50 = neutral · 100 = strong long setup</span>`; }
 function aiBadge(v){ return v?`<span class="aisc" style="background:${aiCol(v.s)}" data-tip="${esc(aiTip(v))}">${v.s}</span> <span class="ail" style="color:${aiCol(v.s)}">${esc(v.l)}</span>`:'<span class="muted" data-tip="Not scored (outside the liquid universe)">–</span>'; }
+let AIL=null;                                        // latest AI score of every ticker
+const aiLatest=async()=>AIL||(AIL=await aiScores());
+const aiChip=v=>v?`<span class="aic" style="background:${aiCol(v.s)}" data-tip="${esc(aiTip(v))}"><i>AI</i>${v.s}</span>`:"";
+function aiDecorate(root){ if(!AIL) return;
+  root.querySelectorAll(".tk[data-tk]:not([data-ai]):not([data-noai])").forEach(el=>{ el.dataset.ai="1"; const v=AIL[el.dataset.tk]; if(v) el.insertAdjacentHTML("afterend",aiChip(v)); }); }
+{ let pend=false; const go=()=>{ pend=false; aiDecorate(document.body); };
+  aiLatest().then(()=>{ go(); new MutationObserver(()=>{ if(!pend){ pend=true; requestAnimationFrame(go); } }).observe(document.body,{childList:true,subtree:true}); }); }
 function aiWhy(v){ if(!v) return "–"; const ng=v.b.length?1:2, nb=v.g.length?Math.min(2,v.b.length):2; const g=v.g.slice(0,ng).map(x=>`<span class="up">✓</span> ${esc(x.replace(/\s*\(.*?\)/g,""))}`), b=v.b.slice(0,nb).map(x=>`<span class="down">✗</span> ${esc(x.replace(/\s*\(.*?\)/g,""))}`);
   return `<span class="aiwhyc" data-tip="${esc(aiTip(v))}">${[...g,...b].join("<br>")||"–"}${v.g.length+v.b.length>g.length+b.length?` <span class="muted">+${v.g.length+v.b.length-g.length-b.length} more</span>`:""}</span>`; }
-function money(x){ return x==null||!isFinite(x)?"–":(x<0?"-":"")+"$"+num(Math.abs(x),0); }
+function money(x){ return x==null||!isFinite(x)?"–":(x<0?"-":"")+"$"+num(Math.abs(x),Math.abs(x)<1000?2:0); }
 function starHTML(t){ const on=WL.has(t); return `<span class="wl ${on?"on":""}" data-star="${esc(t)}" title="Add to / remove from watchlist">${on?"✓ Watching":"+ Watch"}</span>`; }
 document.addEventListener("click", e => {
   const s = e.target.closest("[data-star]"); if(s){ e.stopPropagation(); const on = WL.toggle(s.dataset.star); document.querySelectorAll(`[data-star="${CSS.escape(s.dataset.star)}"]`).forEach(x=>{x.classList.toggle("on",on);x.textContent=on?"✓ Watching":"+ Watch";}); return; }
@@ -427,7 +456,7 @@ class RChart{
           if(s.type==="area"&&first!=null){ g.lineTo(last,Y(s.base??0)); g.lineTo(first,Y(s.base??0)); g.closePath(); g.fillStyle=s.fill; g.fill(); } }
       }
       const used={};
-      for(const m of (p.markers||[])){ if(m.i<i0||m.i>i1) continue; const x=this.xOf(m.i); const s=p.series[0]; const below=m.pos==="below";
+      for(const m of (p.markers||[])){ if(m.i<i0||m.i>i1||(m.minBw&&bw<m.minBw)) continue; const x=this.xOf(m.i); const s=p.series[0]; const below=m.pos==="below";
         const z=m.pill?0:(m.size||8), key=m.i+(below?"b":"a"), off=used[key]||0; used[key]=off+z*1.6+(m.text?(m.pill?17:17):4);
         const yb=below?Y(s.l[m.i])+6+off:Y(s.h[m.i])-6-off; const upd=m.dir?m.dir==="up":below;
         if(m.pill){ g.font=`650 10.5px ${F}`; g.textAlign="center"; const ty=below?yb+9:yb-9, tw3=g.measureText(m.text).width+10, cx=Math.max(tw3/2+2,Math.min(plotW-tw3/2-2,x));
@@ -517,7 +546,7 @@ function attachAC(input,onPick){
   const place=()=>{ const r=input.getBoundingClientRect(); box.style.left=(r.left+window.scrollX)+"px"; box.style.top=(r.bottom+window.scrollY+4)+"px"; box.style.minWidth=Math.max(340,r.width)+"px"; };
   const render=async()=>{ await stocks(); const q=input.value.split(/[,;]/).pop(); items=searchStocks(q); sel=items.length?0:-1;
     if(!q.trim()){ box.style.display="none"; return; } place(); box.style.display="block";
-    box.innerHTML=items.length?items.map((x,k)=>`<div class="it ${k===sel?"on":""}" data-k="${k}"><b>${hlq(x.ticker,q)}</b><span class="nm2">${hlq(x.name||"",q)}</span><span class="px">${fmtPx(x.close)} <span class="${cls(x.chg)}">${pct(x.chg)}</span></span></div>`).join("")
+    box.innerHTML=items.length?items.map((x,k)=>`<div class="it ${k===sel?"on":""}" data-k="${k}"><b>${hlq(x.ticker,q)}</b>${aiChip(AIL&&AIL[x.ticker])}<span class="nm2">${hlq(x.name||"",q)}</span><span class="px">${fmtPx(x.close)} <span class="${cls(x.chg)}">${pct(x.chg)}</span></span></div>`).join("")
       :`<div class="hint">No match for “${esc(q.trim())}” among ${STOCKS.list.length.toLocaleString()} charted tickers</div>`; };
   const pick=k=>{ const x=items[k]; if(!x) return; box.style.display="none"; onPick(x.ticker,input); };
   input.addEventListener("input",render); input.addEventListener("focus",()=>{ if(input.value.trim()) render(); });
@@ -826,13 +855,13 @@ async function renderWLP(cur){
       <optgroup label="Indexes"><option value="etf:SPY">S&amp;P 500 (SPY)</option><option value="etf:QQQ">Nasdaq 100 (QQQ)</option><option value="etf:DIA">Dow Jones 30 (DIA)</option></optgroup>
       <optgroup label="Sectors">${Object.entries(SECTOR_ETFS).sort((a,b)=>a[1].localeCompare(b[1])).map(([k,n])=>`<option value="etf:${k}">${esc(n)} (${k})</option>`).join("")}</optgroup>
       <optgroup label="Industries">${Object.entries(INDUSTRY_ETFS).sort((a,b)=>a[1].localeCompare(b[1])).map(([k,n])=>`<option value="etf:${k}">${esc(n)} (${k})</option>`).join("")}</optgroup></select>
-    <select id="wlo" title="Sort the list"><option value="">Sort: default (A → Z, ETFs by weight)</option><option value="chg">Sort: today % (best first)</option><option value="m1">Sort: 1 month % (best first)</option><option value="rs">Sort: RS rating (best first)</option><option value="v">Sort: P&amp;L / list % (best first)</option></select>
+    <select id="wlo" title="Sort the list"><option value="">Sort: default (A → Z, ETFs by weight)</option><option value="chg">Sort: today % (best first)</option><option value="m1">Sort: 1 month % (best first)</option><option value="rs">Sort: RS rating (best first)</option><option value="ai">Sort: AI score (best first)</option><option value="v">Sort: P&amp;L / list % (best first)</option></select>
     ${isPf&&days.length?dateBtn("wld",W.day,null,"Any entry date"):""}
     <input id="wlq" placeholder="Filter" value="${esc(W.q)}" autocomplete="off"></div>
     <div class="lb" id="wlb" tabindex="0"></div><div class="ft" id="wlf"></div>`;
   $("#wls").value=W.src; $("#wlo").value=W.sort||"";
   const st2=await stocks(); let items=(await wlItems(W.src)).filter(x=>matchQ(W.q,x.t,x.name));
-  if(W.sort){ const S2=st2.map, val=x=>W.sort==="chg"?(S2[x.t]||{}).chg:W.sort==="m1"?(S2[x.t]||{}).perf_1m:W.sort==="rs"?(S2[x.t]||{}).rs:x.v;
+  await aiLatest(); if(W.sort){ const S2=st2.map, val=x=>W.sort==="chg"?(S2[x.t]||{}).chg:W.sort==="m1"?(S2[x.t]||{}).perf_1m:W.sort==="rs"?(S2[x.t]||{}).rs:W.sort==="ai"?((AIL||{})[x.t]||{}).s:x.v;
     const isE=W.src.startsWith("etf:"), head=isE?items.slice(0,1):[], rest=isE?items.slice(1):items;
     items=head.concat(rest.sort((a,b)=>(val(b)??-1e9)-(val(a)??-1e9))); }
   CH.wlList=items.map(x=>x.t);
@@ -840,8 +869,8 @@ async function renderWLP(cur){
     if(nv){ nv.style.display=n>1?"":"none"; $("#lpos").textContent=i>=0?`${i+1} / ${n}`:`– / ${n}`;
       const go=d=>{ const j=i<0?0:Math.max(0,Math.min(n-1,i+d)); if(CH.wlList[j]&&CH.wlList[j]!==cur){ CH.wl.scroll=$("#wlb")?$("#wlb").scrollTop:0; location.hash="#chart/"+encodeURIComponent(CH.wlList[j]); } };
       $("#lprev").onclick=()=>go(-1); $("#lnext").onclick=()=>go(1); } }
-  let ZI={}; try{ ZI=await (CH.zi ||= J("data/zinfo.json")); }catch(e){}
-  $("#wlb").innerHTML=items.length?items.map(x=>`<div class="it ${x.t===cur?"on":""}" data-go="${esc(x.t)}" title="${esc(x.tip||x.name||"")}"><div><b>${esc(x.t)}</b> ${zBoxes(ZI[x.t],{short:true,vgmOnly:true})}<span class="nm3">${esc(x.name||"")}</span></div>
+  let ZI={}; try{ ZI=await (CH.zi ||= J("data/zinfo.json")); }catch(e){} await aiLatest();
+  $("#wlb").innerHTML=items.length?items.map(x=>`<div class="it ${x.t===cur?"on":""}" data-go="${esc(x.t)}" title="${esc(x.tip||x.name||"")}"><div><b>${esc(x.t)}</b> ${aiChip(AIL[x.t])}${zBoxes(ZI[x.t],{short:true,vgmOnly:true})}<span class="nm3">${esc(x.name||"")}</span></div>
       <span class="r"><span class="p">${x.px!=null?fmtPx(x.px):"–"}</span><span class="c ${cls(x.v)}">${x.vl}</span></span></div>`).join("")
     :`<div class="empty" style="padding:20px">${W.src==="wl"?"Your watchlist is empty — use “+ Watch” next to a ticker.":"Nothing in this list."}</div>`;
   const isE=W.src.startsWith("etf:"), nI=isE?items.length-1:items.length;
@@ -871,7 +900,8 @@ async function viewChart(ticker,focus){
   const m=$("#main"); const s=st.map[ticker];
   if(CH.wl&&$("#wlb")) CH.wl.scroll=$("#wlb").scrollTop;
   CH.hide.bo??=true; CH.hide.old??=true;                       // 20-day breakout arrows and old-strategy trades: off unless asked for
-  const TG=[["macd","MACD","MACD panel"],["dmi","DMI","DMI / ADX panel"],["tgt","Target","Zacks price target line"],["zr","Zacks","Zacks Rank / broker tags under the candles and upgrade / downgrade lines"],
+  const TG=[["ai","AI","AI score tags on the candles: AI 80 / 85 / 90 / 95 when the score climbs through those levels (AI 20 / 15 / 10 / 5 for short setups)"],["aip","AI pane","AI score history panel (0–100): green above 80 = strong long setup, red below 20 = strong short setup"],
+    ["macd","MACD","MACD panel"],["dmi","DMI","DMI / ADX panel"],["tgt","Target","Zacks price target line"],["zr","Zacks","Zacks Rank / broker tags under the candles and upgrade / downgrade lines"],
     ["bo","20D","Small arrows: close above the previous 20-day high / below the 20-day low"],["old","Old","Old EMA strategy BUY / SHORT / EXIT markers (backtest)"]];
   m.innerHTML=`<div class="cwrap"><div class="cmain" id="cvcard">
     <div class="ctb">
@@ -888,6 +918,7 @@ async function viewChart(ticker,focus){
       <div class="chelp" id="chelp">
         <b>Move</b> drag the chart · sideways swipe · Shift + scroll &nbsp; <b>Zoom</b> mouse wheel · pinch · ＋/－ &nbsp; <b>Price scale</b> scroll or drag the price axis · double-click it = auto<br>
         <b>Reset</b> double-click the chart &nbsp; <b>Measure</b> 📏 or hold Shift and drag &nbsp; <b>Next / previous symbol</b> ↑ ↓ keys or the list on the right<br>
+        <span style="color:#00c853">AI 80 · 85 · 90 · 95</span> tags = the day the AI score climbed through that level (<span style="color:#ef5350">AI 20 · 15 …</span> = falling into short-setup territory, grey = left the zone) ·
         <span style="color:#b388ff">▲ BOUGHT / ▼ SOLD</span> (purple) = when your Portfolio bought / sold this stock · <b>Rank / Brokers</b> tags = Zacks Rank and broker rating from that day · <span style="color:#26a69a">│</span> / <span style="color:#ef5350">│</span> = upgrade / downgrade ·
         dashed purple line = Zacks price target · green / red shading = EMA uptrend / downtrend (${EMA_TXT})</div>
     </div>
@@ -925,6 +956,18 @@ async function viewChart(ticker,focus){
   const sigRaw=emaArr(macd.map(x=>x),9), hist=macd.map((x,i)=>x!=null&&sigRaw[i]!=null?x-sigRaw[i]:null); const dm=dmi(h,l,c,14);
   const bands=[]; let cur=0,st0=0; for(let i=0;i<=t.st.length;i++){ const s2=i<t.st.length?t.st[i]:99; if(s2!==cur){ if(cur!==0) bands.push([st0,i-1,cur>0?"rgba(38,166,154,.045)":"rgba(239,83,80,.045)"]); cur=s2; st0=i; } }
   const idx={}; dates.forEach((d,i)=>idx[d]=i);
+  const aiv=new Array(c.length).fill(null); if(b.ai) b.ai.forEach((x,k)=>{ if(b.ai0+k<c.length) aiv[b.ai0+k]=x; });
+  const aiM=[]; { const UPC={80:"#43a047",85:"#2e9d4a",90:"#16a34a",95:"#00c853"}, DNC={20:"#ef6c00",15:"#e65100",10:"#d32f2f",5:"#b71c1c"};
+    let pu=null, pd=null;
+    for(let i=0;i<aiv.length;i++){ const x=aiv[i]; if(x==null) continue;
+      // levels only re-arm after the score has clearly left the zone (below 75 / above 25), so small wobbles don't repeat the tags
+      let bu=x>=80?Math.min(95,Math.floor(x/5)*5):x<75?0:pu??0, bd=x<=20?Math.max(5,Math.ceil(x/5)*5):x>25?100:pd??100;
+      if(pu!=null){ if(bu>pu&&bu>=80) aiM.push({i,pos:"below",pill:true,minBw:4,color:UPC[bu],text:`AI ${bu}${bu===95?" ★":""}`});
+        else if(bu===0&&pu>=80) aiM.push({i,pos:"above",pill:true,minBw:7,color:"#5b6672",text:`AI ${x}`});
+        if(bd<pd&&bd<=20) aiM.push({i,pos:"above",pill:true,minBw:4,color:DNC[bd],text:`AI ${bd}`});
+        else if(bd===100&&pd<=20) aiM.push({i,pos:"below",pill:true,minBw:7,color:"#5b6672",text:`AI ${x}`}); }
+      if(x>=80) bu=Math.max(bu,pu??0); if(x<=20) bd=Math.min(bd,pd??100);
+      pu=bu; pd=bd; } }
   const markers=[], oldM=[], boM=[]; let trades=[]; try{ if(!CH.hide.old||focus){ const bt=await backtest(); trades=bt.rows.filter(r=>r.ticker===ticker); }
     for(const r of trades){ const ei=idx[r.entry_date], L=r.side==="long"; if(ei!=null) oldM.push({i:ei,pos:L?"below":"above",dir:L?"up":"down",size:7,stroke:true,color:L?"#26a69a":"#ef5350",text:L?"BUY":"SHORT"});
       if(r.status==="closed"){ const xi=idx[r.exit_date]; if(xi!=null) oldM.push({i:xi,pos:L?"above":"below",dir:L?"down":"up",size:7,stroke:true,color:"#f5c542",text:"EXIT "+pct(r.pnl,1)}); } } }catch(e){}
@@ -941,13 +984,16 @@ async function viewChart(ticker,focus){
     for(const [n,v] of (zi.levels||[])) levels.push({v,color:"#7e57c2",label:lab(n.replace(/zacks\s*/i,""),v)}); }
   $("#cinfo").innerHTML=infoLine(zi);
   aiScores().then(S=>{ const v=S[ticker]; if(v&&$("#aikv")) $("#aikv").innerHTML=`AI ${aiBadge(v)}`; });
+
   const {lines:zl,tags:ztags}=zacksHistory(zi,dates);
-  const PANES={price:{w:3.2,title:ticker+" · 1D",bands,get markers(){ return markers.concat(CH.hide.zr?[]:ztags,CH.hide.bo?[]:boM,CH.hide.old&&!focus?[]:oldM); },get refs(){ return CH.hide.tgt?[]:levels; },series:[{type:"candle",o,h,l,c,tag:true,tagColor:c.at(-1)>=o.at(-1)?"#26a69a":"#ef5350"},
+  const PANES={price:{w:3.2,title:ticker+" · 1D",bands,get markers(){ return markers.concat(CH.hide.ai?[]:aiM,CH.hide.zr?[]:ztags,CH.hide.bo?[]:boM,CH.hide.old&&!focus?[]:oldM); },get refs(){ return CH.hide.tgt?[]:levels; },series:[{type:"candle",o,h,l,c,tag:true,tagColor:c.at(-1)>=o.at(-1)?"#26a69a":"#ef5350"},
       ...EP.map((p,k)=>({type:"line",name:"EMA"+p,v:t.e[p],color:EMA_COL[p]||["#00bcd4","#4c9ffe","#f5a623","#ec407a","#c77dff"][k%5],width:1.1+k*.15})),
       {type:"volume",v,o,c,overlay:true,nolegend:true}]},
     macd:{w:1,title:"MACD 12 26 9",fmt:x=>x.toFixed(Math.abs(x)<1?3:2),refs:[{v:0,inRange:true}],series:[
-      {type:"hist",name:"Hist",v:hist,color:(x,i)=>x>=0?(i>0&&hist[i-1]!=null&&x<hist[i-1]?"rgba(38,166,154,.45)":"#26a69a"):(i>0&&hist[i-1]!=null&&x>hist[i-1]?"rgba(239,83,80,.45)":"#ef5350")},
-      {type:"line",name:"MACD",v:macd,color:"#4c9ffe"},{type:"line",name:"Signal",v:sigRaw,color:"#f5a623"}]},
+      {type:"hist",name:"Hist",v:hist,color:(x,i)=>{ const pv=i>0?hist[i-1]:null; return x>=0?(pv!=null&&x<pv?"#b2dfdb":"#26a69a"):(pv!=null&&x>pv?"#ffcdd2":"#ff5252"); }},
+      {type:"line",name:"MACD",v:macd,color:"#2ab0f5",width:1.6},{type:"line",name:"Signal",v:sigRaw,color:"#ffeb3b",width:1.6}]},
+    ai:{w:.8,title:"AI score",fmt:x=>x.toFixed(0),refs:[{v:80,color:"#1b8a3a"},{v:50,color:"#3a4654"},{v:20,color:"#d32f2f"},{v:100,inRange:true,color:"rgba(0,0,0,0)"}],series:[
+      {type:"hist",name:"AI",v:aiv,color:x=>aiCol(x)}]},
     dmi:{w:1,title:"DMI 14",fmt:x=>x.toFixed(1),refs:[{v:20,color:"#3a4654"}],series:[
       {type:"line",name:"+DI",v:dm.plus,color:"#26a69a"},{type:"line",name:"−DI",v:dm.minus,color:"#ef5350"},{type:"line",name:"ADX",v:dm.adx,color:"#f5c542",width:1.8}]}};
   const build=()=>{ const keep=CH.chart?{f:CH.chart.from,t:CH.chart.to,m:CH.chart.meas,hl:CH.chart.hl}:null; if(CH.chart) CH.chart.destroy();
@@ -955,7 +1001,7 @@ async function viewChart(ticker,focus){
     const H=window.innerWidth<760&&!CH.full?Math.max(400,Math.round(window.innerHeight*.72))           // phone: leave room to scroll past the chart
       :Math.max(460,window.innerHeight-(CH.full?$("#cv").getBoundingClientRect().top:top)-14);
     CH.chart=new RChart($("#cv"),{dates,height:H,initial:70,get vlines(){ return CH.hide.zr?[]:zl; },onMeasureEnd:()=>$("#mbtn").classList.remove("pri"),
-      panes:[PANES.price,...(CH.hide.macd?[]:[PANES.macd]),...(CH.hide.dmi?[]:[PANES.dmi])]});
+      panes:[PANES.price,...(CH.hide.aip||!b.ai?[]:[PANES.ai]),...(CH.hide.macd?[]:[PANES.macd]),...(CH.hide.dmi?[]:[PANES.dmi])]});
     if(keep){ CH.chart.from=keep.f; CH.chart.to=keep.t; CH.chart.meas=keep.m&&keep.m.pi===0?keep.m:null; CH.chart.hl=keep.hl; CH.chart.draw(); }
     document.querySelectorAll("#pnl button").forEach(x=>x.classList.toggle("on",!CH.hide[x.dataset.p])); };
   document.querySelectorAll("#pnl button").forEach(x=>x.onclick=()=>{ CH.hide[x.dataset.p]=!CH.hide[x.dataset.p]; try{localStorage.setItem("mr_hide",JSON.stringify(CH.hide));}catch(e){} build(); });
@@ -1033,7 +1079,7 @@ function drawScan(){
   rows=rows.map(r=>({...r,ai:(SC.ai&&SC.ai[r.ticker]||{}).s??null})); if(SC.sort==="ai") rows=sortRows(rows,"ai",SC.dir);
   const cols=[["ticker","Ticker"],["ai","AI score"],["aiw","Good / bad"],["name","Name"],["close","Close"],["chg","Chg %"],["rs","RS"],["vol_ratio","Vol ×"],["days_trend","Days in trend"],["ext_ema20","% from EMA20"],["perf_1m","1M %"]];
   $("#stbl").innerHTML=rows.length?`<table><thead><tr>${cols.map(([k,l])=>`<th data-k="${k}">${l}${SC.sort===k?(SC.dir>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>
-    <td><span class="tk" data-tk="${esc(r.ticker)}">${esc(r.ticker)}</span>${r.rs_high?' <span class="gold" data-tip="RS line at a 50-day high">★</span>':""} ${starHTML(r.ticker)}</td>
+    <td><span class="tk" data-noai data-tk="${esc(r.ticker)}">${esc(r.ticker)}</span>${r.rs_high?' <span class="gold" data-tip="RS line at a 50-day high">★</span>':""} ${starHTML(r.ticker)}</td>
     <td>${aiBadge(SC.ai&&SC.ai[r.ticker])}</td><td>${aiWhy(SC.ai&&SC.ai[r.ticker])}</td>
     <td class="nm">${esc(r.name)}</td><td>${r.close}</td><td class="${cls(r.chg)}">${pct(r.chg)}</td><td>${r.rs??"–"}</td><td>${r.vol_ratio??"–"}</td>
     <td>${r.days_trend}</td><td>${r.ext_ema20==null?"–":r.ext_ema20+"%"}</td><td class="${cls(r.perf_1m)}">${pct(r.perf_1m,1)}</td></tr>`).join("")}</tbody></table>`:'<div class="empty">No stocks match.</div>';
@@ -1252,11 +1298,11 @@ function colTest(f,isNum){
 async function viewZacks(){
   let z; try{ z=await J("data/zacks.json"); }catch(e){ z=null; }
   if(!z){ $("#main").innerHTML=`<h2>Zacks screen</h2><div class="empty">No Zacks screen downloaded yet. It appears here after the “Zacks screen download” workflow has run once.</div>`; return; }
-  await stocks();
+  await stocks(); await aiLatest();
   const ti=z.ticker_col, nz=z.columns.length, newSet=new Set(z.new);
   const TR=r=>r[nz]==="L"?"Uptrend":r[nz]==="S"?"Downtrend":"No trend";
   // every column: key, label, value getter, numeric?
-  const COLS=[{k:ti,l:z.columns[ti]||"Ticker",get:r=>r[ti]},
+  const COLS=[{k:ti,l:z.columns[ti]||"Ticker",get:r=>r[ti]},{k:"ai",l:"AI score",get:r=>(AIL[r[ti]]||{}).s??null},
     ...z.columns.map((c,i)=>({k:i,l:c,get:r=>r[i]})).filter(c=>c.k!==ti),
     {k:"new",l:"New",get:r=>newSet.has(r[ti])?"New":"–"},
     {k:nz,l:"Trend",get:TR,sortGet:r=>(r[nz]==="L"?1:r[nz]==="S"?-1:0)*1000+(r[nz+1]||0)},
@@ -1291,7 +1337,7 @@ async function viewZacks(){
     $("#zcount").textContent=`${rows.length} of ${z.rows.length}`; const total=rows.length; ZK.shown=rows.map(r=>r[ti]).filter(t=>STOCKS.map[t]);
     $("#zopen").textContent=`▶ ${ZK.shown.length} charts`; rows=rows.slice(0,ZK.lim);
     $("#zbody").innerHTML=rows.map(r=>`<tr>
-      <td><span class="tk" data-tk="${esc(r[ti])}">${esc(r[ti])}</span> ${starHTML(r[ti])}</td>
+      <td><span class="tk" data-noai data-tk="${esc(r[ti])}">${esc(r[ti])}</span> ${starHTML(r[ti])}</td><td>${AIL[r[ti]]?aiBadge(AIL[r[ti]]):"–"}</td>
       ${z.columns.map((_,i)=>i).filter(i=>i!==ti).map(i=>`<td class="${typeof r[i]==="number"?"":"nm"}">${esc(r[i]??"")}</td>`).join("")}
       <td>${newSet.has(r[ti])?'<span class="gold">NEW</span>':""}</td>
       <td>${stateHTML(r[nz],r[nz+1])}</td><td>${r[nz+1]??"–"}</td><td>${r[nz+2]??"–"}</td><td class="${cls(r[nz+3])}">${pct(r[nz+3])}</td><td class="${cls(r[nz+4])}">${pct(r[nz+4],1)}</td></tr>`).join("");
@@ -1315,12 +1361,17 @@ async function viewZPortfolio(){
   const rulesTxt=`Buy at the next open when, at the close: Zacks Rank ≤ <b>${R.max_rank??2}</b> · average broker rating &lt; <b>${R.max_broker??2}</b> (Buy / Strong Buy) ·
     Zacks price target ≥ <b>+${R.min_upside_pct??10}%</b> above the close · EMA uptrend set (${EMA_TXT}) and close above EMA${EMA.exit} · RS rating ≥ <b>${R.min_rs??80}</b> · passes the scanner's liquidity filter.
     Sell at the next open after a close below EMA${EMA.exit}, or when the Zacks Rank falls to ${R.sell_rank??4} or worse.
-    ${money(R.dollars_per_trade??10000)} per position, ${R.cost_pct??0.05}% cost per buy/sell. Tracked forward from its first day (no Zacks history before that). The old EMA strategy is under <a href="#backtest">Backtest (old)</a>.`;
+    <b>${R.shares_per_trade??1} share${(R.shares_per_trade??1)===1?"":"s"}</b> of every stock it buys, ${R.cost_pct??0.05}% cost per buy/sell. Tracked forward from its first day (no Zacks history before that). The old EMA strategy is under <a href="#backtest">Backtest (old)</a>.`;
   if(!z){ $("#main").innerHTML=`<h2>Portfolio</h2><div class="card"><p class="note">${rulesTxt}</p><div class="empty">Tracking starts with the next daily scan.</div></div>`; return; }
   await stocks(); const AIS_=await aiScores();
   const P=z.positions||[], isOpen=p=>p.status==="open"||p.status==="exit next open";
   const open=P.filter(isOpen), pend=P.filter(p=>p.status==="pending"), closed=P.filter(p=>p.status==="closed");
-  const D=R.dollars_per_trade||10000, upl=open.reduce((a,p)=>a+(p.pnl||0)/100*D,0), rpl=closed.reduce((a,p)=>a+(p.pnl||0)/100*D,0);
+  const SH=p=>p.shares||R.shares_per_trade||1;
+  const usd=p=>p.usd!=null?p.usd:p.entry&&(p.status==="closed"?p.exit:p.last)!=null?((p.status==="closed"?p.exit:p.last)-p.entry)*SH(p):null;
+  const cost=p=>p.cost!=null?p.cost:p.entry?p.entry*SH(p):p.last?p.last*SH(p):null;
+  const upl=open.reduce((a,p)=>a+(usd(p)||0),0), rpl=closed.reduce((a,p)=>a+(usd(p)||0),0);
+  const inv=open.reduce((a,p)=>a+(cost(p)||0),0), ord=pend.reduce((a,p)=>a+(cost(p)||0),0), mval=open.reduce((a,p)=>a+(p.last!=null?p.last*SH(p):cost(p)||0),0);
+  const spent=P.filter(p=>p.entry).reduce((a,p)=>a+(cost(p)||0),0);
   const avgO=open.length?open.reduce((a,p)=>a+(p.pnl||0),0)/open.length:null, wins=closed.filter(p=>p.pnl>0).length;
   const kp=(l,v,sub,c="")=>`<div class="kpi"><div class="l">${l}</div><div class="v ${c}">${v}</div>${sub?`<div class="s">${sub}</div>`:""}</div>`;
   const days=[...new Set(P.map(p=>p.entry_date).filter(Boolean))].sort().reverse();
@@ -1330,7 +1381,9 @@ async function viewZPortfolio(){
     <div class="kpis">${kp("Open positions",open.length,`${pend.length} buy order${pend.length===1?"":"s"} for the next open`)}
       ${kp("Open P&amp;L",`${money(upl)}`,`average ${pct(avgO)}`,cls(upl))}
       ${kp("Closed P&amp;L",`${money(rpl)}`,`${closed.length} closed · ${closed.length?Math.round(wins/closed.length*100)+"% winners":"–"}`,cls(rpl))}
-      ${kp("Total P&amp;L",`${money(upl+rpl)}`,`on ${money(D)} per position`,cls(upl+rpl))}</div>
+      ${kp("Total P&amp;L",`${money(upl+rpl)}`,`${spent?pct((upl+rpl)/spent*100):"–"} on ${money(spent)} spent · 1 share each`,cls(upl+rpl))}
+      <div class="kpi kpi-hi" data-tip="Cash needed to copy the whole portfolio with 1 share of every stock: what the open positions cost at their entry price, plus the buy orders at the last close (they fill at the next open).">
+        <div class="l">💰 Money needed</div><div class="v">${money(inv+ord)}</div><div class="s">${money(inv)} in ${open.length} open (worth ${money(mval)} now) + ${money(ord)} for ${pend.length} buy order${pend.length===1?"":"s"}</div></div></div>
     <div class="card"><div class="row" style="gap:10px">
       <div class="seg" id="zpshow">${[["current",`Open + orders (${open.length+pend.length})`],["open",`Open (${open.length})`],["pending",`Buy orders (${pend.length})`],["closed",`Closed (${closed.length})`],["all",`All (${P.length})`]].map(([k,l])=>`<button data-s="${k}" class="${ZP.show===k?"on":""}">${l}</button>`).join("")}</div>
       <label class="muted">Entry date ${dateBtn("zpday",ZP.day,null,"All dates")}</label>
@@ -1341,21 +1394,22 @@ async function viewZPortfolio(){
   const nm=t=>((STOCKS.map[t]||{}).name)||"";
   const rk=(a,b)=>a==null?"–":(b!=null&&b!==a?`<span style="color:${b<a?"#26a69a":"#ef5350"}">${a}→${b}</span>`:`${a}`);
   const ST=p=>p.status==="pending"?`<span class="muted">buy next open</span>`:p.status==="exit next open"?`<span class="gold">sell next open</span>`:p.status==="closed"?"closed":p.status==="open"?`<span class="up">open</span>`:esc(p.status);
-  const cols=[["ticker","Ticker",p=>`<span class="tk" data-tk="${esc(p.ticker)}">${esc(p.ticker)}</span> <span class="muted">${esc(nm(p.ticker))}</span>`],
+  const cols=[["ticker","Ticker",p=>`<span class="tk" data-noai data-tk="${esc(p.ticker)}">${esc(p.ticker)}</span> <span class="muted">${esc(nm(p.ticker))}</span>`],
     ["ai","AI score",p=>aiBadge(AIS_[p.ticker])],["aiw","Good / bad",p=>aiWhy(AIS_[p.ticker])],
     ["status","Status",ST],["entry_date","Entry date",p=>p.entry_date?fd(p.entry_date):`<span class="muted">next open</span>`],["entry","Entry",p=>fmtPx(p.entry)],
     ["exit_date","Exit date",p=>fd(p.exit_date)],["now","Last / exit",p=>fmtPx(p.status==="closed"?p.exit:p.last)],
-    ["pnl","P&amp;L",p=>p.pnl==null?"–":`<b class="${cls(p.pnl)}">${pct(p.pnl)}</b>`],["days","Days",p=>p.days??"–"],
+    ["sh","Shares",p=>SH(p)],["cost","Cost",p=>p.entry?money(cost(p)):cost(p)!=null?`<span class="muted" data-tip="Estimate at the last close — fills at the next open">≈ ${money(cost(p))}</span>`:"–"],
+    ["pnl","P&amp;L",p=>p.pnl==null?"–":`<b class="${cls(p.pnl)}">${pct(p.pnl)}</b>`],["usd","$ P&amp;L",p=>p.usdv==null?"–":`<span class="${cls(p.usdv)}">${money(p.usdv)}</span>`],["days","Days",p=>p.days??"–"],
     ["rank","Rank (entry→now)",p=>rk(p.rank,p.rank_now)],["broker","Brokers (entry→now)",p=>rk(p.broker,p.broker_now)],
     ["upside","Target upside at signal",p=>pct(p.upside,1)],["target","Price target",p=>fmtPx(p.target)],["rs","RS at signal",p=>p.rs],
     ["signal_date","Signal",p=>fd(p.signal_date)],["reason","Sell reason",p=>esc(p.reason||"")]];
   const filt=()=>P.filter(p=>(ZP.show==="all"||(ZP.show==="current"?(isOpen(p)||p.status==="pending"):ZP.show==="open"?isOpen(p):p.status===ZP.show))
       &&(!ZP.day||p.entry_date===ZP.day)&&matchQ(ZP.q,p.ticker,nm(p.ticker)));
-  const draw=()=>{ const rows=filt().map(p=>({...p,now:p.status==="closed"?p.exit:p.last,ai:(AIS_[p.ticker]||{}).s??null})), srt=sortRows(rows,ZP.st.k,ZP.st.d);
+  const draw=()=>{ const rows=filt().map(p=>({...p,now:p.status==="closed"?p.exit:p.last,ai:(AIS_[p.ticker]||{}).s??null,sh:SH(p),cost:cost(p),usdv:usd(p),usd:usd(p)})), srt=sortRows(rows,ZP.st.k,ZP.st.d);
     ZP.shown=srt.map(p=>p.ticker); $("#zpopen").textContent=`▶ ${new Set(ZP.shown).size} charts`;
     $("#zpopen").onclick=()=>openChartList(`Portfolio · ${$("#zpshow button.on")?.textContent.replace(/\s*\(\d+\)/,"")||"positions"}${ZP.day?" · entry "+fd(ZP.day):""}`,ZP.shown);
     const wp=rows.filter(p=>p.pnl!=null), av=wp.length?wp.reduce((a,p)=>a+p.pnl,0)/wp.length:null;
-    $("#zpsum").innerHTML=`${rows.length} position${rows.length===1?"":"s"}${wp.length?` · average <b class="${cls(av)}">${pct(av)}</b> · <b class="${cls(av)}">${money(wp.reduce((a,p)=>a+p.pnl/100*D,0))}</b>`:""}`;
+    $("#zpsum").innerHTML=`${rows.length} position${rows.length===1?"":"s"}${wp.length?` · average <b class="${cls(av)}">${pct(av)}</b> · <b class="${cls(av)}">${money(rows.reduce((a,p)=>a+(p.usdv||0),0))}</b> · cost ${money(rows.reduce((a,p)=>a+(p.cost||0),0))}`:""}`;
     $("#zptbl").innerHTML=rows.length?`<table><thead><tr>${cols.map(([k,l])=>`<th data-k="${k}">${l}${ZP.st.k===k?(ZP.st.d>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>${srt.map(p=>`<tr>${cols.map(([,,f])=>`<td>${f(p)}</td>`).join("")}</tr>`).join("")}</tbody></table>`
       :`<div class="empty">${ZP.day?`No positions with entry date ${fd(ZP.day)} for this view.`:ZP.show==="open"&&pend.length?"No open positions yet — the buy orders fill at the next open.":"Nothing to show."}</div>`;
     $("#zptbl").querySelectorAll("th").forEach(h=>h.onclick=()=>{ ZP.st.d=ZP.st.k===h.dataset.k?-ZP.st.d:-1; ZP.st.k=h.dataset.k; draw(); }); };
@@ -1363,14 +1417,14 @@ async function viewZPortfolio(){
   datePicker($("#zpday"),days.length?days:[z.data_date],v=>{ ZP.day=v; $("#zpday").innerHTML=`📅 ${v?fd(v)+" ("+cnt(v)+")":"All dates"} ▾`; zpDayChanged(); },"All dates");
   const zpDayChanged=()=>{ if(ZP.day&&ZP.show==="pending"){ ZP.show="all"; document.querySelectorAll("#zpshow button").forEach(y=>y.classList.toggle("on",y.dataset.s==="all")); } draw(); };
   $("#zpq").oninput=e=>{ ZP.q=e.target.value; draw(); };
-  $("#zpexp").onclick=()=>saveCSV(`portfolio-${z.data_date}.csv`,[["Ticker","Company","Status","Signal date","Entry date","Entry","Exit date","Exit","Last","P&L %","Days","Sell reason","Rank at signal","Brokers at signal","Upside at signal %","Price target","RS at signal","Rank now","Brokers now"],
-    ...filt().map(p=>[p.ticker,nm(p.ticker),p.status,p.signal_date,p.entry_date||"",p.entry??"",p.exit_date||"",p.exit??"",p.last??"",p.pnl??"",p.days??"",p.reason||"",p.rank,p.broker,p.upside,p.target,p.rs,p.rank_now??"",p.broker_now??""])]);
+  $("#zpexp").onclick=()=>saveCSV(`portfolio-${z.data_date}.csv`,[["Ticker","Company","Status","Signal date","Entry date","Entry","Exit date","Exit","Last","P&L %","Shares","Cost","$ P&L","Days","Sell reason","Rank at signal","Brokers at signal","Upside at signal %","Price target","RS at signal","Rank now","Brokers now"],
+    ...filt().map(p=>[p.ticker,nm(p.ticker),p.status,p.signal_date,p.entry_date||"",p.entry??"",p.exit_date||"",p.exit??"",p.last??"",p.pnl??"",SH(p),cost(p)??"",usd(p)!=null?usd(p).toFixed(2):"",p.days??"",p.reason||"",p.rank,p.broker,p.upside,p.target,p.rs,p.rank_now??"",p.broker_now??""])]);
   draw();
 }
 
 
 /* ------------------------------------------------------------------ ETFs */
-const EF={view:"hi",cat:"",iss:"",lev:"",adv:"1",q:"",per:"m3",st:{k:"m3",d:-1},lim:300,blim:30,ema:"",emac:"9>100>200"};
+const EF={view:"hi",cat:"",iss:"",lev:"",adv:"1",q:"",per:"m3",st:{k:"m3",d:-1},lim:300,blim:30,ema:"",emac:"9>100>200",ai:""};
 /* EMA rule like "9>20>50>100>200", "close>50>200" or "9<20" -> test(fund) ; null if the rule can't be read */
 function emaRule(rule,periods){
   const parts=(rule||"").toLowerCase().replace(/\s+/g,"").split(/([<>])/).filter(Boolean); if(parts.length<3) return null;
@@ -1384,7 +1438,7 @@ const levTag=f=>f.inc&&f.lev===1?`<span class="zb" style="background:#3b6fd8" da
   :`<span class="zb" style="background:${f.lev>0?(f.lev>=3?"#0f7a3a":"#2e9d57"):(f.lev<=-3?"#b71c1c":"#e0533a")}" data-tip="${f.lev>0?"Leveraged long":"Inverse (short)"}: aims for ${f.lev>0?"":"−"}${Math.abs(f.lev)}× the DAILY move of ${esc(f.u||"its index")}. Over weeks it drifts from ${Math.abs(f.lev)}× because of daily resetting.">${f.lev>0?"":"−"}${Math.abs(f.lev)}×</span>`;
 async function viewETFs(arg){
   let E; try{ E=await (EF.data ||= J("data/etfs_all.json")); }catch(e){ $("#main").innerHTML=`<h2>ETFs</h2><div class="empty">The ETF list appears after the next website build.</div>`; return; }
-  const st=await stocks(); const F=E.funds, by={}; F.forEach(f=>by[f.t]=f);
+  const st=await stocks(); await aiLatest(); const F=E.funds, by={}; F.forEach(f=>{ by[f.t]=f; f.ai=(AIL[f.t]||{}).s??null; });
   if(arg){ EF.view="bundles"; EF.q=decodeURIComponent(arg); }
   const cats=Object.entries(F.reduce((a,f)=>(a[f.cat]=(a[f.cat]||0)+1,a),{})).sort((a,b)=>b[1]-a[1]);
   const isss=Object.entries(F.reduce((a,f)=>(f.is&&(a[f.is]=(a[f.is]||0)+1),a),{})).filter(x=>x[1]>=3).sort((a,b)=>a[0].localeCompare(b[0]));
@@ -1400,15 +1454,17 @@ async function viewETFs(arg){
       <select id="eadv" data-tip="Average dollars traded per day (last 20 days). Thin funds have wide bid/ask spreads.">${[["0","Any trading volume"],["0.1","≥ $0.1M a day"],["1","≥ $1M a day"],["10","≥ $10M a day"],["100","≥ $100M a day"]].map(([v,l])=>`<option value="${v}" ${EF.adv===v?"selected":""}>${l}</option>`).join("")}</select>
       <select id="eema" data-tip="EMA trend filter. Uptrend = every EMA above the next slower one (${E.ema.join(" > ")}). Custom lets you write your own rule.">${[["","Any EMA trend"],["up","EMA uptrend ("+E.ema.join(">")+")"],["down","EMA downtrend ("+E.ema.join("<")+")"],["custom","Custom EMA rule…"]].map(([v,l])=>`<option value="${v}" ${EF.ema===v?"selected":""}>${l}</option>`).join("")}</select>
       <input id="eemac" value="${esc(EF.emac)}" style="width:170px;${EF.ema==="custom"?"":"display:none"}" placeholder="e.g. 9>100>200" data-tip="Write EMAs (${E.ema.join(", ")}) or 'close', joined by &gt; or &lt;. Examples: 9&gt;100&gt;200 · close&gt;50 · 9&lt;20&lt;50">
+      <select id="eai" data-tip="Filter by AI score (0 = strong short setup … 100 = strong long setup)">${[["","Any AI score"],["80","AI ≥ 80 (strong long)"],["65","AI ≥ 65 (bullish)"],["-35","AI ≤ 35 (bearish)"],["-20","AI ≤ 20 (strong short)"]].map(([v,l])=>`<option value="${v}" ${EF.ai===v?"selected":""}>${l}</option>`).join("")}</select>
       <select id="eper" data-tip="Period used to rank the Highlights and sort Bundles">${EPER.map(([k,l])=>`<option value="${k}" ${EF.per===k?"selected":""}>Rank by ${l}</option>`).join("")}</select>
     </div></div><div id="ebody"></div>`;
   const qm=(f,q)=>{ if(!q) return true; const Q=q.toUpperCase(); return f.t===Q||(f.u||"")===Q||f.t.includes(Q)||(f.n||"").toUpperCase().includes(Q)||(f.u||"").includes(Q); };
   const emaT=EF.ema==="up"?emaRule(E.ema.join(">"),E.ema):EF.ema==="down"?emaRule(E.ema.join("<"),E.ema):EF.ema==="custom"?emaRule(EF.emac,E.ema):null;
   if(EF.ema==="custom"&&$("#eemac")) $("#eemac").style.borderColor=emaT?"":"#d32f2f";
-  const ok=f=>(!emaT||emaT(f))&&(!EF.cat||f.cat===EF.cat)&&(!EF.iss||f.is===EF.iss)&&(+EF.adv===0||(f.adv||0)>=+EF.adv)
+  const aiOk=f=>!EF.ai||(f.ai!=null&&(+EF.ai>0?f.ai>=+EF.ai:f.ai<=-EF.ai));
+  const ok=f=>aiOk(f)&&(!emaT||emaT(f))&&(!EF.cat||f.cat===EF.cat)&&(!EF.iss||f.is===EF.iss)&&(+EF.adv===0||(f.adv||0)>=+EF.adv)
     &&(!EF.lev||(EF.lev==="1"?f.lev===1&&!f.inc:EF.lev==="long"?f.lev>1:EF.lev==="inv"?f.lev<0:f.inc));
   const P=x=>x==null?"–":`<span class="${cls(x)}">${pct(x,1)}</span>`;
-  const tk=t=>(st.map[t]?`<span class="tk" data-tk="${esc(t)}">${esc(t)}</span>`:`<b data-tip="No chart (very thin trading)">${esc(t)}</b>`)
+  const tk=(t,na)=>(st.map[t]?`<span class="tk" ${na?"data-noai":""} data-tk="${esc(t)}">${esc(t)}</span>`:`<b data-tip="No chart (very thin trading)">${esc(t)}</b>`)
     +(by[t]&&by[t].x?` <span class="gold" data-tip="Price history has a one-day jump over 150% — probably a reverse split our data has not adjusted for. Treat its returns with caution.">⚠</span>`:"");
   const perL=(EPER.find(p=>p[0]===EF.per)||[,""])[1];
   const mini=(title,rows,tip,col=EF.per)=>`<div class="card"><h3 ${tip?`data-tip="${esc(tip)}"`:""}>${title} <button class="sm" style="float:right;padding:2px 8px" data-open="${esc(rows.map(f=>f.t).join(","))}" data-name="${esc(title.replace(/<[^>]+>/g,""))}">▶ Charts</button></h3>
@@ -1450,12 +1506,12 @@ async function viewETFs(arg){
         ${total>B.length?`<div class="row"><button id="emore">Show more bundles (${total-B.length} left)</button></div>`:""}`;
       $("#emore")&&($("#emore").onclick=()=>{ EF.blim+=30; draw(); });
     } else {
-      const cols=[["t","Ticker"],["n","Name"],["cat","Category"],["is","Issuer"],["lev","Lev"],["px","Price"],["d1","1D"],["w1","1W"],["m1","1M"],["m3","3M"],["m6","6M"],["ytd","YTD"],["y1","1Y"],["hi","From 52w high"],["vol","Volatility"],["dd","Max drop 1Y"],["adv","$ / day"],["tr","Trend"],["age","History"],["ab","About the fund"]];
+      const cols=[["t","Ticker"],["ai","AI"],["n","Name"],["cat","Category"],["is","Issuer"],["lev","Lev"],["px","Price"],["d1","1D"],["w1","1W"],["m1","1M"],["m3","3M"],["m6","6M"],["ytd","YTD"],["y1","1Y"],["hi","From 52w high"],["vol","Volatility"],["dd","Max drop 1Y"],["adv","$ / day"],["tr","Trend"],["age","History"],["ab","About the fund"]];
       const tips={vol:"Annualised volatility over 3 months (how much it swings). SPY is usually 12–20%.",dd:"Largest fall from a peak during the last year",hi:"How far below its 52-week high",age:"Years of price history in our data (we keep about 2 years, so older funds show ~2y)",ab:"Who runs it and what it does (from the fund's name and type). Click More for the full fund page.",adv:"Average dollars traded per day, last 20 days"};
       const rows=sortRows(L,EF.st.k,EF.st.d); rows.forEach(f=>shown.push(f.t));
       const R=rows.slice(0,EF.lim);
       $("#ebody").innerHTML=`<div class="card"><h3>${num(rows.length,0)} funds <small>click a column to sort</small></h3><div class="tbl-wrap scroll" style="max-height:720px"><table><thead><tr>${cols.map(([k,l])=>`<th data-k="${k}" ${tips[k]?`data-tip="${tips[k]}"`:""}>${l}${EF.st.k===k?(EF.st.d>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>
-        ${R.map(f=>`<tr><td>${tk(f.t)}</td><td class="muted" style="max-width:280px;overflow:hidden;text-overflow:ellipsis">${esc(f.n)}</td><td class="muted">${esc(f.cat)}</td><td class="muted">${esc(f.is||"")}</td><td>${levTag(f)}</td><td>${fmtPx(f.px)}</td>
+        ${R.map(f=>`<tr><td>${tk(f.t,1)}</td><td>${f.ai!=null?aiChip(AIL[f.t]):"–"}</td><td class="muted" style="max-width:280px;overflow:hidden;text-overflow:ellipsis">${esc(f.n)}</td><td class="muted">${esc(f.cat)}</td><td class="muted">${esc(f.is||"")}</td><td>${levTag(f)}</td><td>${fmtPx(f.px)}</td>
           <td>${P(f.d1)}</td><td>${P(f.w1)}</td><td>${P(f.m1)}</td><td>${P(f.m3)}</td><td>${P(f.m6)}</td><td>${P(f.ytd)}</td><td><b>${P(f.y1)}</b></td><td>${P(f.hi)}</td><td>${f.vol!=null?f.vol+"%":"–"}</td><td class="down">${f.dd!=null?f.dd+"%":"–"}</td>
           <td class="muted">${f.adv!=null?"$"+(f.adv>=1?num(f.adv,f.adv>=100?0:1)+"M":num(f.adv*1000,0)+"k"):"–"}</td><td>${f.tr==="L"?'<span class="up">▲ up</span>':f.tr==="S"?'<span class="down">▼ down</span>':"–"}</td><td class="muted" data-tip="${f.since?"Price history since "+fd(f.since):""}">${f.age!=null?(f.age/365).toFixed(1)+"y":"–"}</td>
           <td class="muted" style="white-space:normal;min-width:320px;max-width:460px;font-size:12px">${esc(f.ab||"")} <a href="https://www.etf.com/${encodeURIComponent(f.t)}" target="_blank" rel="noopener" data-tip="Fund page on etf.com: manager, fees, holdings, launch date">More ↗</a></td></tr>`).join("")}
@@ -1472,19 +1528,19 @@ async function viewETFs(arg){
   };
   document.querySelectorAll("#ev button").forEach(b=>b.onclick=()=>{ EF.view=b.dataset.v; document.querySelectorAll("#ev button").forEach(x=>x.classList.toggle("on",x===b)); draw(); });
   let qt; $("#eq").oninput=e=>{ clearTimeout(qt); qt=setTimeout(()=>{ EF.q=e.target.value.trim(); EF.blim=30; draw(); },200); };
-  for(const [id,k] of [["#ecat","cat"],["#eiss","iss"],["#elev","lev"],["#eadv","adv"],["#eper","per"],["#eema","ema"]]) $(id).onchange=e=>{ EF[k]=e.target.value; if(k==="per") EF.st={k:EF.per,d:-1}; EF.blim=30; viewETFs(); };
+  for(const [id,k] of [["#eai","ai"],["#ecat","cat"],["#eiss","iss"],["#elev","lev"],["#eadv","adv"],["#eper","per"],["#eema","ema"]]) $(id).onchange=e=>{ EF[k]=e.target.value; if(k==="per") EF.st={k:EF.per,d:-1}; EF.blim=30; viewETFs(); };
   let et; $("#eemac").oninput=e=>{ clearTimeout(et); et=setTimeout(()=>{ EF.emac=e.target.value; viewETFs().then(()=>{ const i=$("#eemac"); i.focus(); i.setSelectionRange(i.value.length,i.value.length); }); },500); };
   draw();
 }
 
 
 /* ------------------------------------------------------------------ AI PICKS */
-const AI={side:"both",open:{}};
+const AI={side:"both",open:{},min:0,tmin:80,tdir:"hi",tq:"",ttype:"",tlim:200,st:{k:"s",d:-1}};
 async function viewAI(day){
   let idx; try{ idx=await J("data/ai/index.json"); }catch(e){ idx=[]; }
   if(!idx.length){ $("#main").innerHTML=`<h2>AI picks</h2><div class="empty">The first AI picks appear after the next website build.</div>`; return; }
   const dates=idx.map(x=>x.date).reverse(); day=day&&dates.includes(day)?day:dates[0];
-  const R=await J(`data/ai/${day}.json`); const st=await stocks(); let ZI={}; try{ ZI=await (CH.zi ||= J("data/zinfo.json")); }catch(e){}
+  const R=await J(`data/ai/${day}.json`); const st=await stocks(); const SC=await aiScores(day); let ZI={}; try{ ZI=await (CH.zi ||= J("data/zinfo.json")); }catch(e){}
   const V=R.view||{}, M=V.mood||{};
   const scol={"Lean long":"#1b8a3a","Selective":"#c48a12","Defensive":"#d32f2f"}[V.stance]||"#3a4654";
   const gcol={A:"#1b8a3a",B:"#2e7dd1",C:"#5b6672"};
@@ -1495,12 +1551,13 @@ async function viewAI(day){
     :r.out==="stop"?'<span class="zb" style="background:#d32f2f" data-tip="Hit the stop">STOPPED</span>':'<span class="zb" style="background:#3a4654" data-tip="Neither stop nor target hit yet">OPEN</span>';
   const card=(p,k)=>{ const long=p.side==="long", key=day+p.t+p.side, r=p.res;
     return `<div class="aip ${AI.open[key]?"on":""}" data-key="${esc(key)}">
-      <div class="aih"><span class="ain">${k+1}</span><span class="tk" data-tk="${esc(p.t)}">${esc(p.t)}</span>
-        <span class="zb" style="background:${gcol[p.grade]}" data-tip="Grade ${p.grade}: AI score ${p.score}/100 (A ≥ 75 · B ≥ 63 · C below)">${p.grade} ${p.score}</span>
+      <div class="aih"><span class="ain">${k+1}</span><span class="tk" data-noai data-tk="${esc(p.t)}">${esc(p.t)}</span>
+        ${SC[p.t]?`<span class="aic big" style="background:${aiCol(SC[p.t].s)}" data-tip="${esc(aiTip(SC[p.t]))}">AI ${SC[p.t].s}</span>`:""}
+        <span class="zb" style="background:${gcol[p.grade]}" data-tip="Setup grade ${p.grade} (${long?"long":"short"} setup strength ${p.score}: A ≥ 75 · B ≥ 63 · C below)">${p.grade}</span>
         ${zBoxes(ZI[p.t]||(p.zr?{rank:p.zr,broker:p.zb,vgm:p.vgm}:null),{short:true,vgmOnly:true})}
         <span class="muted aname">${nm(p.t)}</span>
         <span class="aires">${r?`${P(r.now)} ${outTag(r)}`:outTag(null)}</span></div>
-      <div class="aibar"><div style="width:${p.score}%;background:${long?"#26a69a":"#ef5350"}"></div></div>
+      <div class="aibar"><div style="width:${SC[p.t]?(long?SC[p.t].s:100-SC[p.t].s):p.score}%;background:${long?"#26a69a":"#ef5350"}"></div></div>
       <div class="aitags">${(p.pat||[]).map(x=>`<span class="atag">${esc(x)}</span>`).join("")}${p.sector?`<span class="atag muted" data-tip="Sector strength rank today (1 = strongest of 11)">${esc(p.sector)}${p.sector_rank?" #"+p.sector_rank:""}</span>`:""}</div>
       <div class="aiplan"><span data-tip="${long?"Buy-stop just above today's high: only fills if the stock keeps going up":"Sell-short stop just below today's low: only fills if it keeps falling"}"><b>${long?"Buy above":"Short below"}</b> ${fmtPx(p.entry)}</span>
         <span data-tip="Exit if price ${long?"falls to":"rises to"} this level (EMA50 or 2× average daily range)"><b>Stop</b> ${fmtPx(p.stop)}</span>
@@ -1512,6 +1569,7 @@ async function viewAI(day){
   const all=idx.filter(x=>x.perf&&x.perf.long&&x.perf.long.n);
   const agg=k=>{ const v=all.filter(x=>x.perf[k]&&x.perf[k].n); const n=v.reduce((a,x)=>a+x.perf[k].n,0); return n?{avg:v.reduce((a,x)=>a+x.perf[k].avg*x.perf[k].n,0)/n,win:v.reduce((a,x)=>a+x.perf[k].win*x.perf[k].n,0)/n,n}:null; };
   const AL=agg("long"), AS=agg("short");
+  const LS=R.longs.filter(p=>!AI.min||((SC[p.t]||{}).s??p.ai??0)>=AI.min), SS=R.shorts.filter(p=>!AI.min||((SC[p.t]||{}).s??p.ai??100)<=100-AI.min);
   $("#main").innerHTML=`<div class="row" style="margin-bottom:12px;justify-content:space-between"><div class="row"><h2>AI picks</h2>
       ${dateBtn("aid",day,dates[0])}
       <span class="muted">${R.zacks?"":"· no Zacks data for this date (technicals + mood only)"}</span></div>
@@ -1528,13 +1586,54 @@ async function viewAI(day){
           <a href="javascript:void 0" id="aith" style="font-size:12px">day by day ▾</a></div></div>
       <div id="aitd" style="display:none;margin-top:10px"><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Stance</th><th>Mood</th><th>Longs avg</th><th>Long winners</th><th>Shorts avg</th><th>Short winners</th></tr></thead><tbody>
         ${[...idx].reverse().map(x=>`<tr><td><a href="#ai/${x.date}">${fd(x.date)}</a></td><td>${esc(x.stance)}</td><td>${esc(x.mood||"–")}</td><td>${P(x.perf?.long?.avg)}</td><td>${x.perf?.long?.win!=null?x.perf.long.win+"%":"–"}</td><td>${P(x.perf?.short?.avg)}</td><td>${x.perf?.short?.win!=null?x.perf.short.win+"%":"–"}</td></tr>`).join("")}</tbody></table></div></div></div>
-    <div class="grid2"><div><h3 class="aisec up">▲ Long ideas <small class="muted">${R.longs.length}</small></h3>${R.longs.map(card).join("")||'<div class="empty">No long setups passed today.</div>'}</div>
-      <div><h3 class="aisec down">▼ Short ideas <small class="muted">${R.shorts.length}</small></h3>${R.shorts.map(card).join("")||'<div class="empty">No short setups passed today.</div>'}</div></div>
-    <div class="card"><p class="note" style="margin:0"><b>How the AI picks work.</b> Every stock that passes the liquidity filter is scored out of 100 on: EMA trend and how fresh it is, relative strength (RS), 3-month momentum, chart patterns (base breakouts, pullbacks to EMA20/50, bull/bear flags, volatility squeezes, engulfing candles, failed rallies, 20-day breakdowns), volume surges, Zacks Rank / broker rating / price target / VGM, the strength of the stock's sector, and the market mood (VIX, put/call — longs are marked down and shorts up when fear is high). Over-stretched or very volatile stocks lose points. Entry is a stop order beyond today's high (long) or low (short); the stop is the 50-day EMA or 2× the average daily range; the target is 2× the risk. Click a card for the reasons. It is a rules-based model, not financial advice — use it as a shortlist and check each chart.</p></div>`;
+    <div class="card aifilt"><div class="row" style="gap:10px"><b>AI score filter</b>
+      <div class="seg" id="aimin">${[[0,"All"],[70,"≥ 70"],[80,"≥ 80"],[85,"≥ 85"],[90,"≥ 90"]].map(([v,l])=>`<button data-v="${v}" class="${AI.min===v?"on":""}">${l}</button>`).join("")}</div>
+      <span class="muted">${AI.min?`Long ideas with AI ≥ ${AI.min} · short ideas with AI ≤ ${100-AI.min}`:"Pick a level to keep only the strongest ideas"} · the table further down lists <b>every</b> stock</span></div></div>
+    <div class="grid2"><div><h3 class="aisec up">▲ Long ideas <small class="muted">${LS.length}</small></h3>${LS.map(card).join("")||`<div class="empty">No long setups${AI.min?" with AI ≥ "+AI.min:""} today.</div>`}</div>
+      <div><h3 class="aisec down">▼ Short ideas <small class="muted">${SS.length}</small></h3>${SS.map(card).join("")||`<div class="empty">No short setups${AI.min?" with AI ≤ "+(100-AI.min):""} today.</div>`}</div></div>
+    <div class="card"><div class="row" style="justify-content:space-between;gap:10px"><h3 style="margin:0">Every stock by AI score <span class="n" id="aicount"></span> <small>${fd(day)} · ${Object.keys(SC).length.toLocaleString()} tickers scored (stocks ≥ $1 with ≥ 50k shares a day, ETFs from 5k)</small></h3>
+      <button class="pri" id="aitopen">▶ Charts</button></div>
+      <div class="row" style="gap:10px;margin:10px 0">
+        <div class="seg" id="aitdir"><button data-v="hi" class="${AI.tdir==="hi"?"on":""}">Highest (longs)</button><button data-v="lo" class="${AI.tdir==="lo"?"on":""}">Lowest (shorts)</button></div>
+        <label class="muted">AI score ${AI.tdir==="hi"?"≥":"≤"} <input id="aitmin" type="number" min="0" max="100" step="5" value="${AI.tmin}" style="width:70px"></label>
+        <div class="seg sm" id="aitq">${(AI.tdir==="hi"?[95,90,85,80,70]:[5,10,15,20,30]).map(v=>`<button data-v="${v}" class="${AI.tmin===v?"on":""}">${v}</button>`).join("")}</div>
+        <select id="aittype"><option value="">Stocks + ETFs</option><option value="s">Stocks only</option><option value="e">ETFs only</option></select>
+        <input id="aitf" placeholder="Filter ticker, company, setup…" value="${esc(AI.tq)}" style="width:230px"></div>
+      <div class="tbl-wrap scroll" id="aitbl" style="max-height:640px"></div></div>
+    <div class="card"><p class="note" style="margin:0"><b>How the AI score works.</b> Every charted ticker (stocks ≥ $1 trading ≥ 50k shares a day, ETFs from 5k) gets one score from 0 to 100 every day: <b>50 = neutral</b>, <b>80+ = strong long setup</b>, <b>20 or less = strong short setup</b>.
+      It adds up: the EMA trend and how fresh it is · relative strength (RS) · 3-month momentum · chart patterns — <b>cup &amp; handle</b> (a 12–45% deep rounded base of 5–40 weeks after a 20%+ advance, then a 2–15% handle in the upper half on quieter volume; the breakout above the handle is the buy point and scores the most, extra if volume is 1.4× normal), base breakouts, 20-day breakouts, pullbacks to EMA20/50, bull/bear flags, volatility squeezes, golden / death crosses, engulfing candles, failed rallies, 20-day breakdowns · volume surges · Zacks Rank / broker rating / price target / VGM · sector strength ·
+      and the <b>market mood</b> (VIX, VIX vs 3-month VIX, put/call): a Bearish mood takes 4 points off every long setup and pushes every short setup 3 points lower (Bullish does the reverse), so the same chart scores lower when fear is high. Over-stretched (more than 10% above EMA20) or very volatile stocks lose points.
+      The long / short idea cards are the best setups among liquid stocks (≥ $10, ≥ $20M a day); entry is a stop order beyond today's high (long) or low (short), the stop is the 50-day EMA or 2× the average daily range, the target is 2× the risk. Click a card for the reasons. It is a rules-based model, not financial advice — use it as a shortlist and check each chart.</p></div>`;
   datePicker($("#aid"),dates,v=>{ location.hash="#ai/"+v; });
+  document.querySelectorAll("#aimin button").forEach(b=>b.onclick=()=>{ AI.min=+b.dataset.v; viewAI(day); });
+  const isF=t=>{ const ty=(st.map[t]||{}).type; return ty==="ETF"||ty==="ETN"||ty==="ETV"||ty==="ETS"; };
+  const tcols=[["t","Ticker"],["name","Company"],["s","AI score"],["l","Verdict"],["p","Setup"],["g","Good"],["b","Bad"],["close","Price"],["chg","Today"],["m1","1M"],["rs","RS"],["sector","Sector"]];
+  const tdraw=()=>{ const q=AI.tq.trim().toUpperCase();
+    let rows=Object.entries(SC).filter(([t,v])=>(AI.tdir==="hi"?v.s>=AI.tmin:v.s<=AI.tmin)&&(!AI.ttype||(AI.ttype==="e")===isF(t)))
+      .map(([t,v])=>{ const s0=st.map[t]||{}; return {t,s:v.s,l:v.l,p:(v.p||[]).join(", "),g:v.g,b:v.b,v,name:s0.name||"",close:s0.close,chg:s0.chg,m1:s0.perf_1m,rs:s0.rs,sector:s0.sector||(isF(t)?"ETF":"")}; })
+      .filter(x=>!q||x.t.includes(q)||x.name.toUpperCase().includes(q)||x.p.toUpperCase().includes(q)||(x.sector||"").toUpperCase().includes(q));
+    rows=sortRows(rows,AI.st.k,AI.st.d);
+    AI.tshown=rows.map(x=>x.t).filter(t=>st.map[t]); $("#aicount").textContent=rows.length.toLocaleString(); $("#aitopen").textContent=`▶ ${AI.tshown.length} charts`;
+    const R2=rows.slice(0,AI.tlim);
+    $("#aitbl").innerHTML=rows.length?`<table><thead><tr>${tcols.map(([k,l])=>`<th data-k="${k}">${l}${AI.st.k===k?(AI.st.d>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>${R2.map(x=>`<tr>
+      <td><span class="tk" data-noai data-tk="${esc(x.t)}">${esc(x.t)}</span></td><td class="nm" style="max-width:200px">${esc(x.name)}</td>
+      <td>${aiChip(x.v)}</td><td style="color:${aiCol(x.s)}">${esc(x.l)}</td><td>${(x.v.p||[]).map(y=>`<span class="atag">${esc(y)}</span>`).join(" ")||'<span class="muted">trend</span>'}</td>
+      <td class="nm" style="max-width:280px" data-tip="${esc(aiTip(x.v))}">${x.g[0]?`<span class="up">✓</span> ${esc(x.g[0])}`:"–"}</td><td class="nm" style="max-width:280px" data-tip="${esc(aiTip(x.v))}">${x.b[0]?`<span class="down">✗</span> ${esc(x.b[0])}`:"–"}</td>
+      <td>${fmtPx(x.close)}</td><td class="${cls(x.chg)}">${pct(x.chg)}</td><td class="${cls(x.m1)}">${pct(x.m1,1)}</td><td>${x.rs??"–"}</td><td class="muted">${esc(x.sector||"")}</td></tr>`).join("")}</tbody></table>
+      ${rows.length>R2.length?`<div class="row" style="padding:10px"><span class="muted">Showing ${R2.length} of ${rows.length}</span><button id="aitmore">Show all</button></div>`:""}`
+      :`<div class="empty">No ticker has an AI score ${AI.tdir==="hi"?"≥":"≤"} ${AI.tmin} on ${fd(day)}.</div>`;
+    $("#aitmore")&&($("#aitmore").onclick=()=>{ AI.tlim=1e9; tdraw(); });
+    $("#aitbl").querySelectorAll("th[data-k]").forEach(h=>h.onclick=()=>{ const k=h.dataset.k; AI.st.d=AI.st.k===k?-AI.st.d:-1; AI.st.k=k; tdraw(); }); };
+  document.querySelectorAll("#aitdir button").forEach(b=>b.onclick=()=>{ AI.tdir=b.dataset.v; AI.tmin=AI.tdir==="hi"?80:20; AI.st={k:"s",d:AI.tdir==="hi"?-1:1}; viewAI(day); });
+  document.querySelectorAll("#aitq button").forEach(b=>b.onclick=()=>{ AI.tmin=+b.dataset.v; $("#aitmin").value=AI.tmin; document.querySelectorAll("#aitq button").forEach(x=>x.classList.toggle("on",x===b)); AI.tlim=200; tdraw(); });
+  $("#aitmin").oninput=e=>{ const v=+e.target.value; if(isFinite(v)){ AI.tmin=v; document.querySelectorAll("#aitq button").forEach(x=>x.classList.toggle("on",+x.dataset.v===v)); AI.tlim=200; tdraw(); } };
+  $("#aittype").value=AI.ttype; $("#aittype").onchange=e=>{ AI.ttype=e.target.value; tdraw(); };
+  $("#aitf").oninput=e=>{ AI.tq=e.target.value; tdraw(); };
+  $("#aitopen").onclick=()=>{ if(AI.tshown.length>500&&!confirm(`Open ${AI.tshown.length} charts?`)) return; openChartList(`AI ${AI.tdir==="hi"?"≥":"≤"} ${AI.tmin} · ${fd(day)}`,AI.tshown); };
+  tdraw();
   $("#aith").onclick=()=>{ const d=$("#aitd"); d.style.display=d.style.display==="none"?"":"none"; };
-  $("#aol").onclick=()=>openChartList(`AI longs ${fd(day)}`,R.longs.map(p=>p.t).filter(t=>st.map[t]));
-  $("#aos").onclick=()=>openChartList(`AI shorts ${fd(day)}`,R.shorts.map(p=>p.t).filter(t=>st.map[t]));
+  $("#aol").onclick=()=>openChartList(`AI longs ${fd(day)}`,LS.map(p=>p.t).filter(t=>st.map[t]));
+  $("#aos").onclick=()=>openChartList(`AI shorts ${fd(day)}`,SS.map(p=>p.t).filter(t=>st.map[t]));
   document.querySelectorAll(".aip").forEach(el=>el.onclick=e=>{ if(e.target.closest(".tk")) return; AI.open[el.dataset.key]=!AI.open[el.dataset.key]; el.classList.toggle("on"); });
 }
 

@@ -24,7 +24,11 @@
    "entry_date": "2026-11-27",
    "entry": 29.1045,
    "pnl": -0.84,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": -0.24,
+   "cost": 29.1
   },
   {
    "ticker": "AER",
@@ -48,7 +52,11 @@
    "entry_date": "2026-11-27",
    "entry": 170.5452,
    "pnl": 0.38,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": 0.65,
+   "cost": 170.55
   },
   {
    "ticker": "CDNA",
@@ -72,7 +80,11 @@
    "entry_date": "2026-11-27",
    "entry": 77.8189,
    "pnl": -0.85,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": -0.66,
+   "cost": 77.82
   },
   {
    "ticker": "CON",
@@ -96,7 +108,11 @@
    "entry_date": "2026-11-27",
    "entry": 43.2716,
    "pnl": 0.74,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": 0.32,
+   "cost": 43.27
   },
   {
    "ticker": "EHC",
@@ -120,7 +136,11 @@
    "entry_date": "2026-11-27",
    "entry": 137.4687,
    "pnl": 1.28,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": 1.76,
+   "cost": 137.47
   },
   {
    "ticker": "ETON",
@@ -144,7 +164,11 @@
    "entry_date": "2026-11-27",
    "entry": 66.033,
    "pnl": 1.28,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": 0.85,
+   "cost": 66.03
   },
   {
    "ticker": "EXLS",
@@ -168,7 +192,11 @@
    "entry_date": "2026-11-27",
    "entry": 45.1225,
    "pnl": 1.41,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": 0.64,
+   "cost": 45.12
   },
   {
    "ticker": "EXTR",
@@ -192,7 +220,11 @@
    "entry_date": "2026-11-27",
    "entry": 25.2526,
    "pnl": 2.05,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": 0.52,
+   "cost": 25.25
   },
   {
    "ticker": "FA",
@@ -216,7 +248,11 @@
    "entry_date": "2026-11-27",
    "entry": 21.5608,
    "pnl": 2.13,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": 0.46,
+   "cost": 21.56
   },
   {
    "ticker": "FIGS",
@@ -240,7 +276,11 @@
    "entry_date": "2026-11-27",
    "entry": 21.2406,
    "pnl": 6.35,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": 1.35,
+   "cost": 21.24
   },
   {
    "ticker": "GCT",
@@ -264,7 +304,11 @@
    "entry_date": "2026-11-27",
    "entry": 62.4312,
    "pnl": 6.18,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": 3.86,
+   "cost": 62.43
   },
   {
    "ticker": "GEO",
@@ -288,7 +332,11 @@
    "entry_date": "2026-11-27",
    "entry": 31.0155,
    "pnl": -0.6,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": -0.19,
+   "cost": 31.02
   },
   {
    "ticker": "IRON",
@@ -312,7 +360,11 @@
    "entry_date": "2026-11-27",
    "entry": 89.5047,
    "pnl": 0.5,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": 0.45,
+   "cost": 89.5
   },
   {
    "ticker": "KTB",
@@ -336,7 +388,11 @@
    "entry_date": "2026-11-27",
    "entry": 83.1816,
    "pnl": 0.6,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": 0.5,
+   "cost": 83.18
   },
   {
    "ticker": "LFST",
@@ -360,7 +416,11 @@
    "entry_date": "2026-11-27",
    "entry": 14.5573,
    "pnl": 0.36,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": 0.05,
+   "cost": 14.56
   },
   {
    "ticker": "LNG",
@@ -384,7 +444,11 @@
    "entry_date": "2026-11-27",
    "entry": 305.0424,
    "pnl": -0.0,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": -0.0,
+   "cost": 305.04
   },
   {
    "ticker": "MCK",
@@ -408,7 +472,11 @@
    "entry_date": "2026-11-27",
    "entry": 1074.637,
    "pnl": 0.1,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": 1.02,
+   "cost": 1074.64
   },
   {
    "ticker": "MGNI",
@@ -432,7 +500,11 @@
    "entry_date": "2026-11-27",
    "entry": 26.9535,
    "pnl": 0.47,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": 0.13,
+   "cost": 26.95
   },
   {
    "ticker": "ONC",
@@ -456,7 +528,11 @@
    "entry_date": "2026-11-27",
    "entry": 417.4686,
    "pnl": 0.44,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": 1.82,
+   "cost": 417.47
   },
   {
    "ticker": "REPL",
@@ -480,7 +556,11 @@
    "entry_date": "2026-11-27",
    "entry": 21.6808,
    "pnl": 3.73,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": 0.81,
+   "cost": 21.68
   },
   {
    "ticker": "ROIV",
@@ -504,7 +584,11 @@
    "entry_date": "2026-11-27",
    "entry": 42.4812,
    "pnl": 1.81,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": 0.77,
+   "cost": 42.48
   },
   {
    "ticker": "SEZL",
@@ -528,7 +612,11 @@
    "entry_date": "2026-11-27",
    "entry": 150.5152,
    "pnl": -0.79,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": -1.19,
+   "cost": 150.52
   },
   {
    "ticker": "TREX",
@@ -552,7 +640,11 @@
    "entry_date": "2026-11-27",
    "entry": 53.6768,
    "pnl": 1.68,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": 0.9,
+   "cost": 53.68
   },
   {
    "ticker": "U",
@@ -576,7 +668,11 @@
    "entry_date": "2026-11-27",
    "entry": 50.1851,
    "pnl": 0.23,
-   "days": 0
+   "days": 0,
+   "shares": 1,
+   "sized": "shares",
+   "usd": 0.11,
+   "cost": 50.19
   },
   {
    "ticker": "TPC",
@@ -596,7 +692,10 @@
    "broker_now": 1.33,
    "vs_ema": 5.2,
    "to_target": 29.6,
-   "chg": 2.09
+   "chg": 2.09,
+   "shares": 1,
+   "sized": "shares",
+   "cost": 92.46
   }
  ],
  "blocked": [
@@ -625,13 +724,16 @@
   [
    "2026-11-25",
    0.0,
-   0
+   0,
+   null,
+   0.0
   ],
   [
    "2026-11-27",
-   2864.91,
+   14.69,
    24,
-   728.32
+   728.32,
+   3060.75
   ]
  ],
  "rules": {
@@ -640,8 +742,14 @@
   "min_upside_pct": 10,
   "min_rs": 80,
   "sell_rank": 4,
-  "dollars_per_trade": 10000,
+  "shares_per_trade": 1,
   "cost_pct": 0.05
  },
- "data_date": "2026-11-27"
+ "data_date": "2026-11-27",
+ "capital": {
+  "invested": 3060.75,
+  "value": 3075.44,
+  "orders": 92.46,
+  "needed": 3153.21
+ }
 }

@@ -63,6 +63,13 @@ def build_site(w, ind):
     (data / "calendar.json").write_text(jsonsafe.dumps(cal))
 
     O, H, L, C, V = (w[k] for k in ("open", "high", "low", "close", "volume"))
+    aih = {}                                                # daily AI score history (data/ai/hist/<date>.json)
+    for f in sorted((ROOT / "data" / "ai" / "hist").glob("????-??-??.json")):
+        try:
+            aih[f.stem] = json.loads(f.read_text())
+        except Exception:
+            pass
+    ai_days = [(k, aih[d]) for k, d in enumerate(cal) if d in aih]
     for t in chart_set:
         s = C[t]
         first = s.first_valid_index()
@@ -75,6 +82,14 @@ def build_site(w, ind):
             return [_num(x, nd) for x in df[t].to_numpy()[i0:]]
         bars = {"t": t, "i0": int(i0), "o": arr(O, px_nd), "h": arr(H, px_nd), "l": arr(L, px_nd),
                 "c": arr(C, px_nd), "v": [None if not np.isfinite(x) else int(x) for x in V[t].to_numpy()[i0:]]}
+        sc = [(k - i0, m.get(t)) for k, m in ai_days if k >= i0]
+        sc = [x for x in sc if x[1] is not None]
+        if sc:
+            a0 = sc[0][0]
+            arr_ = [None] * (sc[-1][0] - a0 + 1)
+            for k, v_ in sc:
+                arr_[k - a0] = v_
+            bars["ai0"], bars["ai"] = a0, arr_
         (data / "bars" / f"{t}.json").write_text(jsonsafe.dumps(bars, separators=(",", ":")))
 
     # one summary row per charted ticker (used by search, watchlist, chart header)

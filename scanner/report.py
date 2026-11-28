@@ -87,14 +87,16 @@ def build_email(result, bt=None, zp=None, brief=None):
     P = zp.get("positions", [])
     last = zp.get("last_day")
     r = zp.get("rules", {})
-    D = r.get("dollars_per_trade", 10000)
+    global _AIS
+    _AIS = brief.get("aiscores") or {}
+    cap = zp.get("capital") or {}
     buys = [p for p in P if p["status"] == "pending" and p.get("signal_date") == last]
     sells = [p for p in P if p["status"] == "exit next open" and p.get("exit_signal") == last]
     opn = sorted([p for p in P if p["status"] in ("open", "exit next open")], key=lambda p: -(p.get("pnl") or 0))
     closed = sorted([p for p in P if p["status"] == "closed"], key=lambda p: p.get("exit_date", ""), reverse=True)
     sold_today = [p for p in closed if p.get("exit_date") == last]
-    upl = sum((p.get("pnl") or 0) / 100 * D for p in opn)
-    rpl = sum((p.get("pnl") or 0) / 100 * D for p in closed)
+    upl = sum(p.get("usd") or 0 for p in opn)
+    rpl = sum(p.get("usd") or 0 for p in closed)
     avg = sum(p.get("pnl") or 0 for p in opn) / len(opn) if opn else None
     wins = sum(1 for p in closed if (p.get("pnl") or 0) > 0)
 
@@ -102,7 +104,7 @@ def build_email(result, bt=None, zp=None, brief=None):
         return f'<span style="color:{_color(x)}">{_fmt(x, "%")}</span>'
 
     def usd(x):
-        return f'<span style="color:{_color(x)}">{"-" if x < 0 else ""}${abs(x):,.0f}</span>'
+        return f'<span style="color:{_color(x)}">{_money(x)}</span>'
 
     def table(head, rows, tint=None):
         if not rows:
@@ -138,13 +140,13 @@ def build_email(result, bt=None, zp=None, brief=None):
     def px(x):
         return "–" if x is None else f"{x:,.2f}"
 
-    tk = lambda p: f'<b>{escape(p["ticker"])}</b>'
+    tk = lambda p: _tka(p["ticker"])
     parts = [
         '<div style="font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:820px;color:#222">',
         f'<h1 style="font-size:20px;margin:0 0 4px">Market Radar portfolio — {day}</h1>',
         f'<p style="margin:0 0 4px;color:#444">{len(opn)} open positions · open P&amp;L {usd(upl)} (average {pc(avg)}) · '
         f'closed P&amp;L {usd(rpl)} from {len(closed)} trades ({wins} winners) · total {usd(upl + rpl)} '
-        f'on ${D:,.0f} per position · tracking since {fd(zp.get("start"))}</p>',
+        f'· 1 share of each stock · money needed for everything: <b>{_money(cap.get("needed"))}</b> · tracking since {fd(zp.get("start"))}</p>',
         f'<p style="margin:0 0 8px"><a href="{site}#portfolio">Open the portfolio on the website →</a></p>' if site else "",
         _mood_banner(brief.get("mood")),
         _tldr(result, zp, brief, opn, buys, sells, sold_today),
@@ -163,6 +165,7 @@ def build_email(result, bt=None, zp=None, brief=None):
               [[tk(p), fd(p.get("entry_date")), px(p.get("entry")), px(p.get("last")), pc(p.get("pnl")), escape(p.get("reason", ""))] for p in sells]),
         _market_section(result, P, buys, opn, h2, th, td, brief),
         _ai_section(brief.get("ai"), h2, th, td),
+        _ai_cross_section(brief, h2, th, td),
         _zchanges_section(brief, h2),
         _near_section(brief, h2, th, td, sec),
         _leaders_section(brief, result, h2, th, td),
@@ -176,9 +179,9 @@ def build_email(result, bt=None, zp=None, brief=None):
         return f"{a}" if b is None or b == a else f'<span style="color:{"#0a7d38" if b < a else "#c62828"}">{a}→{b}</span>'
     parts += [
         f'<h2 {h2}>📈 Open positions ({len(opn)})</h2>',
-        table(["Ticker", "Sector", "Bought", "Entry", "Last", "Today", "P&amp;L", "Days", "Above EMA50<br>(sell line)", "To target", "Rank", "Brokers"],
+        table(["Ticker", "Sector", "Bought", "Entry", "Last", "Today", "P&amp;L", "$ P&amp;L<br>(1 share)", "Days", "Above EMA50<br>(sell line)", "To target", "Rank", "Brokers"],
               [[tk(p) + (" ⚠️ sell next open" if p["status"] == "exit next open" else ""), sec_cell(p), fd(p.get("entry_date")),
-                px(p.get("entry")), px(p.get("last")), pc(p.get("chg")), f'<b>{pc(p.get("pnl"))}</b>', p.get("days", 0),
+                px(p.get("entry")), px(p.get("last")), pc(p.get("chg")), f'<b>{pc(p.get("pnl"))}</b>', usd(p.get("usd") or 0), p.get("days", 0),
                 pc(p.get("vs_ema")), pc(p.get("to_target")),
                 rk(p.get("rank"), p.get("rank_now")), rk(p.get("broker"), p.get("broker_now"))] for p in opn],
               tint=[tint(p) for p in opn]),
@@ -207,15 +210,63 @@ def _tbl(th, td, head, rows):
             + "".join("<tr>" + "".join(f"<td {td}>{c}</td>" for c in row) + "</tr>" for row in rows) + "</table>")
 
 
+_AIS = {}
+
+
+def _aicol(v):
+    return "#1b8a3a" if v >= 80 else "#43a047" if v >= 65 else "#78838f" if v >= 45 else "#ef6c00" if v >= 30 else "#d32f2f"
+
+
+def _aib(t):
+    """Small coloured AI-score box shown after a ticker."""
+    v = (_AIS.get(t) or {}).get("s")
+    if v is None:
+        return ""
+    return (f' <span title="AI score {v}/100 — {escape(_AIS[t].get("l", ""))}" style="display:inline-block;min-width:18px;text-align:center;'
+            f'background:{_aicol(v)};color:#fff;border-radius:3px;padding:0 4px;font-size:11px;font-weight:700">{v}</span>')
+
+
+def _tka(t):
+    return f'<b>{escape(t)}</b>{_aib(t)}'
+
+
+def _money(x):
+    if x is None:
+        return "–"
+    return f'{"-" if x < 0 else ""}${abs(x):,.2f}' if abs(x) < 1000 else f'{"-" if x < 0 else ""}${abs(x):,.0f}'
+
+
+def _ai_cross_section(brief, h2, th, td):
+    """Stocks whose AI score just crossed 80 (or 20 for shorts), and the full 80+ list."""
+    A, prev = brief.get("aiscores") or {}, brief.get("aiprev") or {}
+    if not A:
+        return ""
+    up = sorted([t for t, v in A.items() if v["s"] >= 80 and (prev.get(t) or 0) < 80], key=lambda t: -A[t]["s"])
+    dn = sorted([t for t, v in A.items() if v["s"] <= 20 and (prev.get(t) or 100) > 20], key=lambda t: A[t]["s"])
+    top = sorted([t for t, v in A.items() if v["s"] >= 80], key=lambda t: -A[t]["s"])
+    site = os.environ.get("SITE_URL", "")
+    row = lambda t: [_tka(t), f'{prev.get(t, "–")} → <b>{A[t]["s"]}</b>', escape(", ".join(A[t].get("p") or []) or "trend"),
+                     escape((A[t].get("g") or [""])[0]), escape((A[t].get("b") or [""])[0])]
+    out = (f'<h2 {h2}>🎯 AI score 80+ <span style="font-weight:400;font-size:12px;color:#777">({len(top)} stocks score 80 or more today · '
+           f'{len(up)} just crossed above 80)</span></h2>')
+    if up:
+        out += '<p style="margin:2px 0"><b style="color:#0a7d38">Just crossed above 80</b></p>' + _tbl(th, td, ["Ticker", "AI (yesterday → today)", "Setup", "Best point", "Watch out"], [row(t) for t in up[:15]])
+    if dn:
+        out += '<p style="margin:2px 0"><b style="color:#c62828">Just fell to 20 or below (short setups)</b></p>' + _tbl(th, td, ["Ticker", "AI (yesterday → today)", "Setup", "Bullish point", "Bearish point"], [row(t) for t in dn[:10]])
+    if top and not up:
+        out += '<p style="margin:2px 0">Highest scores: ' + ", ".join(f'{_tka(t)}' for t in top[:20]) + "</p>"
+    return out + (f'<p style="margin:0 0 10px;font-size:12px"><a href="{site}#ai">Filter every stock by AI score on the website →</a></p>' if site else "")
+
+
 def _tldr(result, zp, brief, opn, buys, sells, sold_today):
     """'Yesterday in 30 seconds' box at the very top."""
     daily = zp.get("daily") or []
-    D = (zp.get("rules") or {}).get("dollars_per_trade", 10000)
     lines = []
+    sg = lambda x: ("+" if x >= 0 else "") + _money(x)
     if len(daily) >= 2 and any(x[2] for x in daily[-2:]):
         d = daily[-1][1] - daily[-2][1]
-        lines.append(f'Portfolio <b style="color:{_color(d)}">{"+" if d >= 0 else "-"}${abs(d):,.0f}</b> on the day · '
-                     f'total <b style="color:{_color(daily[-1][1])}">{"+" if daily[-1][1] >= 0 else "-"}${abs(daily[-1][1]):,.0f}</b> · {len(opn)} open positions.')
+        lines.append(f'Portfolio <b style="color:{_color(d)}">{sg(d)}</b> on the day · '
+                     f'total <b style="color:{_color(daily[-1][1])}">{sg(daily[-1][1])}</b> · {len(opn)} open positions (1 share each).')
     elif opn:
         lines.append(f"{len(opn)} open positions (first day — no daily change yet).")
     else:
@@ -349,10 +400,10 @@ def _ai_section(R, h2, th, td):
     col = {"Lean long": "#0a7d38", "Selective": "#d17a00", "Defensive": "#c62828"}.get(V.get("stance"), "#555")
 
     def rows(L, long):
-        return [[f'<b>{escape(p["t"])}</b>', f'{p["grade"]} {p["score"]}', escape(", ".join(p.get("pat") or []) or "trend"),
+        return [[_tka(p["t"]), f'{p["grade"]} · AI {p.get("ai", p["score"])}', escape(", ".join(p.get("pat") or []) or "trend"),
                  f'{"above" if long else "below"} {p["entry"]:,.2f}', f'{p["stop"]:,.2f}', f'{p["target"]:,.2f}', f'{p["risk"]}%',
                  escape((p.get("why") or [""])[0])] for p in L[:5]]
-    head = ["Ticker", "Grade", "Setup", "Entry", "Stop", "Target", "Risk", "Main reason"]
+    head = ["Ticker", "Grade · AI", "Setup", "Entry", "Stop", "Target", "Risk", "Main reason"]
     return (f'<h2 {h2}>🤖 AI picks — stance: <span style="color:{col}">{escape(V.get("stance", ""))}</span></h2>'
             f'<p style="margin:0 0 6px">{escape(V.get("tip", ""))}</p>'
             '<p style="margin:6px 0 2px"><b style="color:#0a7d38">▲ Top long ideas</b></p>' + _tbl(th, td, head, rows(R.get("longs") or [], True))
@@ -392,7 +443,7 @@ def _near_section(brief, h2, th, td, sec):
     N = brief.get("near") or []
     if not N:
         return ""
-    rows = [[f'<b>{escape(x["t"])}</b>', escape(x["why"]), x["rank"], f'{x["broker"]:.2f}', _pcs(x["upside"]), x["rs"], _pcs(x["m1"])] for x in N]
+    rows = [[_tka(x["t"]), escape(x["why"]), x["rank"], f'{x["broker"]:.2f}', _pcs(x["upside"]), x["rs"], _pcs(x["m1"])] for x in N]
     return (f'<h2 {h2}>👀 Next in line <span style="font-weight:400;font-size:12px;color:#777">(pass every buy rule but one — '
             f'{brief.get("near_total", len(N))} stocks, strongest {len(N)} shown)</span></h2>'
             + _tbl(th, td, ["Ticker", "Still missing", "Zacks", "Brokers", "To target", "RS", "1 month"], rows))
@@ -403,7 +454,7 @@ def _leaders_section(brief, result, h2, th, td):
     if not L:
         return ""
     names = {r["ticker"]: r["name"] for r in result.get("sectors") or []}
-    rows = [[f'<b>{escape(x["t"])}</b>', escape(names.get(x["sector"], x["sector"])), x["rs"], _pcs(x["m1"]),
+    rows = [[_tka(x["t"]), escape(names.get(x["sector"], x["sector"])), x["rs"], _pcs(x["m1"]),
              x["rank"] if x["rank"] else "–", f'{x["broker"]:.2f}' if x["broker"] else "–"] for x in L]
     return (f'<h2 {h2}>⭐ Leaders in the leading sectors <span style="font-weight:400;font-size:12px;color:#777">(in an EMA uptrend, not owned — '
             'the Zacks columns show why they are not a buy yet)</span></h2>'
@@ -413,7 +464,7 @@ def _leaders_section(brief, result, h2, th, td):
 def _portfolio_section(zp, opn, closed, h2, th, td, brief=None):
     """How the portfolio is doing: totals, vs SPY, daily P&L history and a check of every open position."""
     r = zp.get("rules", {})
-    D = r.get("dollars_per_trade", 10000)
+    cap = zp.get("capital") or {}
     daily = zp.get("daily") or []
     filled = [p for p in zp.get("positions", []) if p.get("entry")]
 
@@ -421,16 +472,17 @@ def _portfolio_section(zp, opn, closed, h2, th, td, brief=None):
         return "–" if x is None else f'<span style="color:{_color(x)}">{x:+.{d}f}%</span>'
 
     def usd(x):
-        return "–" if x is None else f'<span style="color:{_color(x)}">{"-" if x < 0 else "+"}${abs(x):,.0f}</span>'
+        return "–" if x is None else f'<span style="color:{_color(x)}">{"" if x < 0 else "+"}{_money(x)}</span>'
     bt = lambda L: ", ".join(f'<b>{escape(p["ticker"])}</b> {pc(p.get("pnl"))}' for p in L)
     if not filled:
         pend = [p for p in zp.get("positions", []) if p["status"] == "pending"]
         return (f'<h2 {h2}>📊 How the portfolio is doing</h2><p style="margin:0 0 8px;color:#444">Nothing bought yet — '
                 f'{len(pend)} buy orders fill at the next open, and the first results appear in tomorrow\'s email.</p>')
-    upl = sum((p.get("pnl") or 0) / 100 * D for p in opn)
-    rpl = sum((p.get("pnl") or 0) / 100 * D for p in closed)
+    upl = sum(p.get("usd") or 0 for p in opn)
+    rpl = sum(p.get("usd") or 0 for p in closed)
     tot = upl + rpl
-    ret = tot / (D * len(filled)) * 100
+    used = sum((p.get("cost") or 0) for p in filled) or 1
+    ret = tot / used * 100
     today = daily[-1][1] - daily[-2][1] if len(daily) >= 2 else None
     first = next((x for x in daily if len(x) > 3 and x[2]), None)
     spy_ret = (daily[-1][3] / first[3] - 1) * 100 if first and len(daily[-1]) > 3 and daily[-1][3] and first[3] else None
@@ -440,7 +492,8 @@ def _portfolio_section(zp, opn, closed, h2, th, td, brief=None):
     cell = lambda l, v, sub="": (f'<td style="padding:8px 10px;border:1px solid #e6e6e6;vertical-align:top"><div style="font-size:11px;color:#777">{l}</div>'
                                   f'<div style="font-size:17px;font-weight:700;margin-top:2px">{v}</div><div style="font-size:11px;color:#777">{sub}</div></td>')
     kpi = ('<table cellspacing="0" style="border-collapse:collapse;width:100%;margin:4px 0 10px"><tr>'
-           + cell("Total P&amp;L", usd(tot), f"{pc(ret)} on ${D * len(filled):,.0f} used")
+           + cell("Total P&amp;L", usd(tot), f"{pc(ret)} on {_money(used)} spent (1 share each)")
+           + cell("Money needed", _money(cap.get("needed")), f"{_money(cap.get('invested'))} in open positions + {_money(cap.get('orders'))} for buy orders")
            + cell("Today", usd(today), "change in total P&amp;L")
            + cell("Open positions", f"{len(opn)}", f"{usd(upl)} · average {pc(avg([p for p in opn if p.get('pnl') is not None]))}")
            + cell("Closed trades", f"{len(closed)}", f"{usd(rpl)} · {len(wins)} won" + (f" ({len(wins) / len(closed):.0%})" if closed else ""))
@@ -453,7 +506,7 @@ def _portfolio_section(zp, opn, closed, h2, th, td, brief=None):
     if len(hist) >= 2:
         m = max(abs(x[1]) for x in hist) or 1
         bars = ('<table cellspacing="0" style="border-collapse:collapse;margin:2px 0 4px"><tr style="vertical-align:bottom">'
-                + "".join(f'<td title="{fmt_date(x[0])}: ${x[1]:,.0f}" style="padding:0 1px;height:46px;vertical-align:{"bottom" if x[1] >= 0 else "top"}">'
+                + "".join(f'<td title="{fmt_date(x[0])}: {_money(x[1])}" style="padding:0 1px;height:46px;vertical-align:{"bottom" if x[1] >= 0 else "top"}">'
                           f'<div style="width:14px;height:{max(2, int(44 * abs(x[1]) / m))}px;background:{"#26a69a" if x[1] >= 0 else "#ef5350"}"></div></td>' for x in hist)
                 + f'</tr></table><div style="font-size:11px;color:#888;margin-bottom:8px">Total P&amp;L each day, {fmt_date(hist[0][0])} → {fmt_date(hist[-1][0])}</div>')
     # checks on open positions
