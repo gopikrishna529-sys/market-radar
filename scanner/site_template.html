@@ -124,6 +124,13 @@ table.trades tbody tr{cursor:pointer} tr.sel td{background:#1d2a3a!important}
 table:has(tbody td:first-child .tk) td:first-child{max-width:220px;overflow:hidden;text-overflow:ellipsis}
 /* Zacks letter boxes (style scores, rank, brokers) */
 .zb{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 3px;border-radius:4px;font-size:10.5px;font-weight:750;color:#fff;line-height:1;vertical-align:middle;cursor:default}
+.mood{display:inline-block;padding:3px 9px;border-radius:12px;color:#fff;font-size:12px;font-weight:650;white-space:nowrap;margin-left:auto}
+#moodpill:empty{display:none}#moodpill+.asof{margin-left:12px}
+.mban{display:flex;gap:12px;align-items:flex-start;max-width:1700px;margin:10px auto 0;padding:10px 14px;border-radius:10px;font-size:13px;line-height:1.5}
+.mban.red{background:#3a1416;border:1px solid #d32f2f;color:#ffd9d6}.mban.amber{background:#3a2c0f;border:1px solid #c48a12;color:#ffe9b8}
+.mban button{background:transparent;border:0;color:inherit;font-size:16px;padding:0 4px}
+@media(max-width:760px){.mban{margin:8px 10px 0}.mood{font-size:11px;padding:2px 7px}}
+th[draggable=true]{cursor:grab}th.dragover{box-shadow:inset 3px 0 0 var(--accent);background:var(--panel2)}
 #tipbox{position:fixed;z-index:999;pointer-events:none;max-width:320px;background:#1c2530;color:#e7ebf0;border:1px solid #33414f;border-radius:7px;padding:6px 9px;font-size:12px;line-height:1.45;box-shadow:0 6px 24px rgba(0,0,0,.5);display:none}
 [data-tip]{cursor:default}
 .zbs{display:inline-flex;gap:2px;vertical-align:middle}.zbs .zb{min-width:16px;height:16px;font-size:10px}
@@ -162,8 +169,10 @@ table:has(tbody td:first-child .tk) td:first-child{max-width:220px;overflow:hidd
     <a href="#download" data-r="download">Download</a>
   </nav>
   <div class="hsearch"><input id="gq" placeholder="Search ticker or company…  ( / )" autocomplete="off" spellcheck="false"></div>
+  <span id="moodpill"></span>
   <div class="asof" id="asof"></div>
 </header>
+<div id="mbanner"></div>
 <main id="main"><div class="loading">Loading…</div></main>
 
 <script>
@@ -1289,7 +1298,14 @@ async function viewZPortfolio(){
 
 
 /* ------------------------------------------------------------------ ETFs */
-const EF={view:"hi",cat:"",iss:"",lev:"",adv:"1",q:"",per:"m3",st:{k:"m3",d:-1},lim:300,blim:30};
+const EF={view:"hi",cat:"",iss:"",lev:"",adv:"1",q:"",per:"m3",st:{k:"m3",d:-1},lim:300,blim:30,ema:"",emac:"9>100>200"};
+/* EMA rule like "9>20>50>100>200", "close>50>200" or "9<20" -> test(fund) ; null if the rule can't be read */
+function emaRule(rule,periods){
+  const parts=(rule||"").toLowerCase().replace(/\s+/g,"").split(/([<>])/).filter(Boolean); if(parts.length<3) return null;
+  const val=tok=>{ if(/^(c|close|price|px)$/.test(tok)) return f=>f.px; const p=+tok.replace(/^ema/,""); const i=periods.indexOf(p); return i<0?null:f=>(f.e||[])[i]; };
+  const steps=[]; for(let i=0;i<parts.length-2;i+=2){ const a=val(parts[i]), op=parts[i+1], b=val(parts[i+2]); if(!a||!b||!/[<>]/.test(op)) return null; steps.push([a,op,b]); }
+  return f=>steps.every(([a,op,b])=>{ const x=a(f), y=b(f); return x!=null&&y!=null&&(op===">"?x>y:x<y); });
+}
 const EPER=[["d1","1 day"],["w1","1 week"],["m1","1 month"],["m3","3 months"],["m6","6 months"],["ytd","YTD"],["y1","1 year"]];
 const levTag=f=>f.inc&&f.lev===1?`<span class="zb" style="background:#3b6fd8" data-tip="Income fund: sells options for monthly / weekly payouts. Price return shown here leaves out those payouts.">INC</span>`
   :f.lev===1?`<span class="zb" style="background:#3a4654" data-tip="Not leveraged">1×</span>`
@@ -1310,10 +1326,14 @@ async function viewETFs(arg){
       <select id="eiss"><option value="">All issuers</option>${isss.map(([c,n])=>`<option value="${esc(c)}" ${EF.iss===c?"selected":""}>${esc(c)} (${n})</option>`).join("")}</select>
       <select id="elev">${[["","Any leverage"],["1","Not leveraged (1×)"],["long","Leveraged long (2×, 3×…)"],["inv","Inverse / short"],["inc","Income / covered-call"]].map(([v,l])=>`<option value="${v}" ${EF.lev===v?"selected":""}>${l}</option>`).join("")}</select>
       <select id="eadv" data-tip="Average dollars traded per day (last 20 days). Thin funds have wide bid/ask spreads.">${[["0","Any trading volume"],["0.1","≥ $0.1M a day"],["1","≥ $1M a day"],["10","≥ $10M a day"],["100","≥ $100M a day"]].map(([v,l])=>`<option value="${v}" ${EF.adv===v?"selected":""}>${l}</option>`).join("")}</select>
+      <select id="eema" data-tip="EMA trend filter. Uptrend = every EMA above the next slower one (${E.ema.join(" > ")}). Custom lets you write your own rule.">${[["","Any EMA trend"],["up","EMA uptrend ("+E.ema.join(">")+")"],["down","EMA downtrend ("+E.ema.join("<")+")"],["custom","Custom EMA rule…"]].map(([v,l])=>`<option value="${v}" ${EF.ema===v?"selected":""}>${l}</option>`).join("")}</select>
+      <input id="eemac" value="${esc(EF.emac)}" style="width:170px;${EF.ema==="custom"?"":"display:none"}" placeholder="e.g. 9>100>200" data-tip="Write EMAs (${E.ema.join(", ")}) or 'close', joined by &gt; or &lt;. Examples: 9&gt;100&gt;200 · close&gt;50 · 9&lt;20&lt;50">
       <select id="eper" data-tip="Period used to rank the Highlights and sort Bundles">${EPER.map(([k,l])=>`<option value="${k}" ${EF.per===k?"selected":""}>Rank by ${l}</option>`).join("")}</select>
     </div></div><div id="ebody"></div>`;
   const qm=(f,q)=>{ if(!q) return true; const Q=q.toUpperCase(); return f.t===Q||(f.u||"")===Q||f.t.includes(Q)||(f.n||"").toUpperCase().includes(Q)||(f.u||"").includes(Q); };
-  const ok=f=>(!EF.cat||f.cat===EF.cat)&&(!EF.iss||f.is===EF.iss)&&(+EF.adv===0||(f.adv||0)>=+EF.adv)
+  const emaT=EF.ema==="up"?emaRule(E.ema.join(">"),E.ema):EF.ema==="down"?emaRule(E.ema.join("<"),E.ema):EF.ema==="custom"?emaRule(EF.emac,E.ema):null;
+  if(EF.ema==="custom"&&$("#eemac")) $("#eemac").style.borderColor=emaT?"":"#d32f2f";
+  const ok=f=>(!emaT||emaT(f))&&(!EF.cat||f.cat===EF.cat)&&(!EF.iss||f.is===EF.iss)&&(+EF.adv===0||(f.adv||0)>=+EF.adv)
     &&(!EF.lev||(EF.lev==="1"?f.lev===1&&!f.inc:EF.lev==="long"?f.lev>1:EF.lev==="inv"?f.lev<0:f.inc));
   const P=x=>x==null?"–":`<span class="${cls(x)}">${pct(x,1)}</span>`;
   const tk=t=>(st.map[t]?`<span class="tk" data-tk="${esc(t)}">${esc(t)}</span>`:`<b data-tip="No chart (very thin trading)">${esc(t)}</b>`)
@@ -1352,20 +1372,21 @@ async function viewETFs(arg){
           return `<div class="card"><h3 style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${bt?tk(bt):`<b>${esc(b.u)}</b>`} <span class="muted" style="font-weight:400">${esc(s0.name||(b.base||{}).n||"")}</span>
             ${s0.close!=null?`<span>${fmtPx(s0.close)} ${P(s0.chg)} · 1M ${P(s0.perf_1m)} · 3M ${P(s0.perf_3m)}</span>`:""}<span class="muted" style="font-weight:400">${b.a.length} funds</span>
             <button class="sm" style="margin-left:auto;padding:2px 8px" data-open="${esc([bt,...rows.map(f=>f.t)].filter(Boolean).join(","))}" data-name="${esc(b.u+" bundle")}">▶ Charts</button></h3>
-            <div class="tbl-wrap"><table><thead><tr><th>Ticker</th><th>Type</th><th>Issuer</th><th>Price</th><th>1D</th><th>1M</th><th>3M</th><th>1Y</th><th data-tip="3M return vs leverage × underlying">Decay 3M</th><th>$ / day</th><th>Name</th></tr></thead><tbody>
-            ${rows.map(f=>`<tr><td>${tk(f.t)}</td><td>${levTag(f)}</td><td class="muted">${esc(f.is||"")}</td><td>${fmtPx(f.px)}</td><td>${P(f.d1)}</td><td>${P(f.m1)}</td><td><b>${P(f.m3)}</b></td><td>${P(f.y1)}</td><td>${f.dec==null?"–":`<span class="${cls(f.dec)}">${f.dec>0?"+":""}${f.dec} pts</span>`}</td><td class="muted">${f.adv!=null?"$"+(f.adv>=1?num(f.adv,f.adv>=100?0:1)+"M":num(f.adv*1000,0)+"k"):"–"}</td><td class="muted" style="max-width:300px;overflow:hidden;text-overflow:ellipsis">${esc(f.n)}</td></tr>`).join("")}
+            <div class="tbl-wrap"><table><thead><tr><th>Ticker</th><th>Type</th><th>Issuer</th><th>Price</th><th>1D</th><th>1M</th><th>3M</th><th>1Y</th><th data-tip="3M return vs leverage × underlying">Decay 3M</th><th>$ / day</th><th>About</th></tr></thead><tbody>
+            ${rows.map(f=>`<tr><td>${tk(f.t)}</td><td>${levTag(f)}</td><td class="muted">${esc(f.is||"")}</td><td>${fmtPx(f.px)}</td><td>${P(f.d1)}</td><td>${P(f.m1)}</td><td><b>${P(f.m3)}</b></td><td>${P(f.y1)}</td><td>${f.dec==null?"–":`<span class="${cls(f.dec)}">${f.dec>0?"+":""}${f.dec} pts</span>`}</td><td class="muted">${f.adv!=null?"$"+(f.adv>=1?num(f.adv,f.adv>=100?0:1)+"M":num(f.adv*1000,0)+"k"):"–"}</td><td class="muted" style="white-space:normal;min-width:300px;max-width:440px;font-size:12px"><b style="color:var(--text);font-weight:600">${esc(f.n)}</b><br>${esc(f.ab||"")} <a href="https://www.etf.com/${encodeURIComponent(f.t)}" target="_blank" rel="noopener">More ↗</a></td></tr>`).join("")}
             </tbody></table></div></div>`; }).join("")}
         ${total>B.length?`<div class="row"><button id="emore">Show more bundles (${total-B.length} left)</button></div>`:""}`;
       $("#emore")&&($("#emore").onclick=()=>{ EF.blim+=30; draw(); });
     } else {
-      const cols=[["t","Ticker"],["n","Name"],["cat","Category"],["is","Issuer"],["lev","Lev"],["px","Price"],["d1","1D"],["w1","1W"],["m1","1M"],["m3","3M"],["m6","6M"],["ytd","YTD"],["y1","1Y"],["hi","From 52w high"],["vol","Volatility"],["dd","Max drop 1Y"],["adv","$ / day"],["tr","Trend"],["age","Age"]];
-      const tips={vol:"Annualised volatility over 3 months (how much it swings). SPY is usually 12–20%.",dd:"Largest fall from a peak during the last year",hi:"How far below its 52-week high",age:"Years of price history we have (max ~2)",adv:"Average dollars traded per day, last 20 days"};
+      const cols=[["t","Ticker"],["n","Name"],["cat","Category"],["is","Issuer"],["lev","Lev"],["px","Price"],["d1","1D"],["w1","1W"],["m1","1M"],["m3","3M"],["m6","6M"],["ytd","YTD"],["y1","1Y"],["hi","From 52w high"],["vol","Volatility"],["dd","Max drop 1Y"],["adv","$ / day"],["tr","Trend"],["age","History"],["ab","About the fund"]];
+      const tips={vol:"Annualised volatility over 3 months (how much it swings). SPY is usually 12–20%.",dd:"Largest fall from a peak during the last year",hi:"How far below its 52-week high",age:"Years of price history in our data (we keep about 2 years, so older funds show ~2y)",ab:"Who runs it and what it does (from the fund's name and type). Click More for the full fund page.",adv:"Average dollars traded per day, last 20 days"};
       const rows=sortRows(L,EF.st.k,EF.st.d); rows.forEach(f=>shown.push(f.t));
       const R=rows.slice(0,EF.lim);
       $("#ebody").innerHTML=`<div class="card"><h3>${num(rows.length,0)} funds <small>click a column to sort</small></h3><div class="tbl-wrap scroll" style="max-height:720px"><table><thead><tr>${cols.map(([k,l])=>`<th data-k="${k}" ${tips[k]?`data-tip="${tips[k]}"`:""}>${l}${EF.st.k===k?(EF.st.d>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>
         ${R.map(f=>`<tr><td>${tk(f.t)}</td><td class="muted" style="max-width:280px;overflow:hidden;text-overflow:ellipsis">${esc(f.n)}</td><td class="muted">${esc(f.cat)}</td><td class="muted">${esc(f.is||"")}</td><td>${levTag(f)}</td><td>${fmtPx(f.px)}</td>
           <td>${P(f.d1)}</td><td>${P(f.w1)}</td><td>${P(f.m1)}</td><td>${P(f.m3)}</td><td>${P(f.m6)}</td><td>${P(f.ytd)}</td><td><b>${P(f.y1)}</b></td><td>${P(f.hi)}</td><td>${f.vol!=null?f.vol+"%":"–"}</td><td class="down">${f.dd!=null?f.dd+"%":"–"}</td>
-          <td class="muted">${f.adv!=null?"$"+(f.adv>=1?num(f.adv,f.adv>=100?0:1)+"M":num(f.adv*1000,0)+"k"):"–"}</td><td>${f.tr==="L"?'<span class="up">▲ up</span>':f.tr==="S"?'<span class="down">▼ down</span>':"–"}</td><td class="muted">${f.age!=null?(f.age/365).toFixed(1)+"y":"–"}</td></tr>`).join("")}
+          <td class="muted">${f.adv!=null?"$"+(f.adv>=1?num(f.adv,f.adv>=100?0:1)+"M":num(f.adv*1000,0)+"k"):"–"}</td><td>${f.tr==="L"?'<span class="up">▲ up</span>':f.tr==="S"?'<span class="down">▼ down</span>':"–"}</td><td class="muted" data-tip="${f.since?"Price history since "+fd(f.since):""}">${f.age!=null?(f.age/365).toFixed(1)+"y":"–"}</td>
+          <td class="muted" style="white-space:normal;min-width:320px;max-width:460px;font-size:12px">${esc(f.ab||"")} <a href="https://www.etf.com/${encodeURIComponent(f.t)}" target="_blank" rel="noopener" data-tip="Fund page on etf.com: manager, fees, holdings, launch date">More ↗</a></td></tr>`).join("")}
         </tbody></table></div>${rows.length>R.length?`<div class="row" style="padding:10px"><span class="muted">Showing ${R.length} of ${rows.length}</span><button id="emore">Show all</button></div>`:""}</div>`;
       document.querySelectorAll("#ebody th[data-k]").forEach(h=>h.onclick=()=>{ const k=h.dataset.k; EF.st.d=EF.st.k===k?-EF.st.d:-1; EF.st.k=k; draw(); });
       $("#emore")&&($("#emore").onclick=()=>{ EF.lim=1e9; draw(); });
@@ -1379,7 +1400,8 @@ async function viewETFs(arg){
   };
   document.querySelectorAll("#ev button").forEach(b=>b.onclick=()=>{ EF.view=b.dataset.v; document.querySelectorAll("#ev button").forEach(x=>x.classList.toggle("on",x===b)); draw(); });
   let qt; $("#eq").oninput=e=>{ clearTimeout(qt); qt=setTimeout(()=>{ EF.q=e.target.value.trim(); EF.blim=30; draw(); },200); };
-  for(const [id,k] of [["#ecat","cat"],["#eiss","iss"],["#elev","lev"],["#eadv","adv"],["#eper","per"]]) $(id).onchange=e=>{ EF[k]=e.target.value; if(k==="per") EF.st={k:EF.per,d:-1}; EF.blim=30; draw(); };
+  for(const [id,k] of [["#ecat","cat"],["#eiss","iss"],["#elev","lev"],["#eadv","adv"],["#eper","per"],["#eema","ema"]]) $(id).onchange=e=>{ EF[k]=e.target.value; if(k==="per") EF.st={k:EF.per,d:-1}; EF.blim=30; viewETFs(); };
+  let et; $("#eemac").oninput=e=>{ clearTimeout(et); et=setTimeout(()=>{ EF.emac=e.target.value; viewETFs().then(()=>{ const i=$("#eemac"); i.focus(); i.setSelectionRange(i.value.length,i.value.length); }); },500); };
   draw();
 }
 
@@ -1399,6 +1421,40 @@ attachAC($("#gq"),t=>{ $("#gq").value=""; $("#gq").blur(); location.hash="#chart
 $("#gq").addEventListener("keydown",e=>{ if(e.key==="Enter"){ const v=$("#gq").value.trim(); if(v){ const hit=searchStocks(v,1)[0]; location.hash="#chart/"+encodeURIComponent(hit?hit.ticker:v.toUpperCase()); $("#gq").value=""; $("#gq").blur(); } } });
 document.addEventListener("keydown",e=>{ if(e.key==="/"&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){ e.preventDefault(); $("#gq").focus(); } });
 J("data/stocks.json").then(s=>$("#asof").textContent="Data to "+fd(s.date)).catch(()=>{});
+/* drag a column title onto another to move that column (every table); right-click a title to reset. Order is remembered. */
+(()=>{
+  const lab=th=>(th.dataset.k||th.textContent.replace(/[▲▼]/g,"").trim());
+  const key=t=>{ const h=t.closest("[id]"); return "mr_cols_"+(location.hash.split("/")[0]||"#")+"_"+(h?h.id:"")+"_"+(t._orig||[]).length; };
+  const place=(t,r)=>{ if(!r.cells.length||r.cells[0]._p||r.cells.length!==t._orig.length) return;   // a freshly drawn row is in the original order
+    const cells=[...r.cells]; if(t._order.join("|")!==t._orig.join("|")) t._order.forEach(l=>{ const i=t._orig.indexOf(l); if(i>=0) r.appendChild(cells[i]); });
+    [...r.cells].forEach(c=>c._p=1); };
+  const bind=(t,th)=>{ if(th._b) return; th._b=1; th.draggable=true;
+    th.addEventListener("dragstart",e=>{ e.dataTransfer.setData("text/plain",lab(th)); e.dataTransfer.effectAllowed="move"; t._drag=lab(th); });
+    th.addEventListener("dragover",e=>{ if(t._drag){ e.preventDefault(); th.classList.add("dragover"); } });
+    th.addEventListener("dragleave",()=>th.classList.remove("dragover"));
+    th.addEventListener("drop",e=>{ e.preventDefault(); th.classList.remove("dragover"); const from=t._order.indexOf(t._drag), to=t._order.indexOf(lab(th)); t._drag=null;
+      if(from<0||to<0||from===to) return;
+      [...t.rows].forEach(r=>{ if(r.cells.length!==t._orig.length) return; const c=r.cells[from], ref=r.cells[to]; if(from<to) ref.after(c); else ref.before(c); });
+      const o=[...t._order]; o.splice(to,0,o.splice(from,1)[0]); t._order=o; try{ localStorage.setItem(key(t),JSON.stringify(o)); }catch(_){} });
+    th.addEventListener("dragend",()=>{ t._drag=null; });
+    th.addEventListener("contextmenu",e=>{ e.preventDefault(); if(!confirm("Put this table's columns back in their original order?")) return; try{ localStorage.removeItem(key(t)); }catch(_){} route(); }); };
+  const scan=()=>document.querySelectorAll("#main table").forEach(t=>{
+    const hr=t.tHead&&t.tHead.rows[0]; if(!hr||[...hr.cells].some(c=>c.colSpan>1)) return;
+    if(!t._orig){ t._orig=[...hr.cells].map(lab); let o=null; try{ o=JSON.parse(localStorage.getItem(key(t))||"null"); }catch(e){}
+      t._order=o&&o.length===t._orig.length&&o.every(l=>t._orig.includes(l))?o:[...t._orig]; }
+    [...t.rows].forEach(r=>place(t,r)); [...t.tHead.rows[0].cells].forEach(th=>bind(t,th)); });
+  let q=0; new MutationObserver(()=>{ if(!q){ q=1; requestAnimationFrame(()=>{ q=0; scan(); }); } }).observe(document.getElementById("main"),{childList:true,subtree:true});
+})();
+/* market mood: pill in the top bar + alert banner (VIX, put/call ratio) */
+J("data/sentiment.json").then(m=>{ if(!m||!m.mood) return;
+  const col={Bullish:"#1b8a3a",Neutral:"#3a4654",Cautious:"#c48a12",Bearish:"#d32f2f"}[m.mood]||"#3a4654";
+  const tip=`<b>Market mood: ${esc(m.mood)}</b><br>${m.vix!=null?`VIX ${m.vix} (${m.vix_chg>0?"+":""}${m.vix_chg}%), ${esc(m.vix_zone||"")}<br>`:""}${m.term!=null?`VIX ÷ 3-month VIX ${m.term} ${m.term>=1?"(stress)":"(normal)"}<br>`:""}${m.pcr_total!=null?`Put/call ${m.pcr_total} (5-day ${m.pcr_avg5})<br>`:""}<i>${esc(m.action||"")}</i>`;
+  $("#moodpill").innerHTML=`<span class="mood" style="background:${col}" data-tip="${esc(tip)}">${esc(m.mood)}${m.vix!=null?` · VIX ${(+m.vix).toFixed(1)}`:""}${m.pcr_total!=null?` · P/C ${(+m.pcr_total).toFixed(2)}`:""}</span>`;
+  const key="mr_mb_"+(m.vix_date||"")+(m.pcr_date||"")+m.mood; let seen=false; try{ seen=localStorage.getItem("mr_mb")===key; }catch(e){}
+  if((m.alerts&&m.alerts.length||m.changed)&&!seen){ const red=(m.alerts||[]).some(a=>a.level==="red");
+    $("#mbanner").innerHTML=`<div class="mban ${red?"red":"amber"}"><div style="flex:1"><b>${red?"🚨":"⚠️"} Market alert — mood: ${esc(m.mood)}</b>${m.changed?` · ${esc(m.changed)}`:""}
+      ${(m.alerts||[]).map(a=>`<div>• ${esc(a.text)}</div>`).join("")}<div style="margin-top:3px"><b>What to do:</b> ${esc(m.action||"")}</div></div><button id="mbx" title="Hide until something changes">✕</button></div>`;
+    $("#mbx").onclick=()=>{ $("#mbanner").innerHTML=""; try{ localStorage.setItem("mr_mb",key); }catch(e){} }; } }).catch(()=>{});
 route();
 </script>
 </body>

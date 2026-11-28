@@ -128,6 +128,9 @@ def build_site(w, ind):
         build_etfs(w, ind, data / "etfs_all.json")
     except Exception as e:
         print(f"ETF tab: skipped ({e})")
+    sm = ROOT / "data" / "sentiment.json"                   # market mood (VIX, put/call) for the banner
+    if sm.exists():
+        (data / "sentiment.json").write_text(json.dumps((json.loads(sm.read_text()) or {}).get("summary") or {}))
     zp = ROOT / "data" / "zportfolio.json"                  # Zacks portfolio (tracked forward, see zportfolio.py)
     if zp.exists():
         (data / "zportfolio.json").write_text(zp.read_text())

@@ -34,8 +34,16 @@ def main():
         update_holdings()                           # S&P 500 / Nasdaq 100 / sector ETF members (once a day)
     except Exception as e:
         print(f"holdings: skipped ({e})")
+    def mood(w):
+        try:
+            from scanner.sentiment import update as update_mood
+            return update_mood([d.strftime("%Y-%m-%d") for d in w["close"].index])
+        except Exception as e:
+            print(f"market mood: skipped ({e})")
+            return None
     if site_only:                                   # new Zacks file, same prices: refresh the website only
         w = load_panel()
+        mood(w)
         ind = compute(w)
         zportfolio.update(w, ind)                   # marks to market; buys only on a new price day
         build_site(w, ind)
@@ -50,11 +58,13 @@ def main():
           f"{len(result['rs_days'])} up-while-SPY-down, {len(result['rs_leaders'])} RS leaders")
     bt = run_backtest(w, ind)
     zp = zportfolio.update(w, ind)
+    md = mood(w)
     build_site(w, ind)
     if "--no-email" not in sys.argv:
         try:
             from scanner.brief import build as build_brief
             brief = build_brief(w, ind, result, zp)
+            brief["mood"] = (md or {}).get("summary")
         except Exception as e:                      # the email still goes out without the extras
             print(f"morning brief: skipped ({e})")
             brief = None

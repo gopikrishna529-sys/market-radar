@@ -117,6 +117,64 @@ def _cat(name, lev, und, stock_set, issuer=""):
     return "Single stock" if und in stock_set else "Other"
 
 
+SPECIAL = {"NANC": "Copies the stock trades that Democratic members of Congress disclose (Unusual Whales / Subversive).",
+           "KRUZ": "Copies the stock trades that Republican members of Congress disclose (Unusual Whales / Subversive).",
+           "GOP": "Copies stock trades disclosed by Republican members of Congress.",
+           "DEMZ": "Holds companies whose employees and PACs mostly donate to Democrats.",
+           "GURU": "Holds the top stock ideas of large hedge funds, taken from their quarterly 13F filings.",
+           "BUZZ": "Holds the US stocks with the most bullish chatter on social media and news.",
+           "MEME": "Holds the most-talked-about 'meme' stocks.",
+           "ARKK": "Cathie Wood's flagship fund of disruptive-innovation stocks (actively managed, very volatile)."}
+CRYPTO = [("bitcoin", "bitcoin"), ("ether", "ether"), ("solana", "Solana"), ("xrp", "XRP")]
+
+
+def _about(t, name, iss, cat, lev, und, inc, und_name):
+    if t in SPECIAL:
+        txt = SPECIAL[t]
+    else:
+        u = und_name or und or "its index"
+        n = name.lower()
+        if lev > 1:
+            txt = f"Aims for {lev:g}× the daily move of {u}. It resets every day, so over weeks the result drifts from {lev:g}× (good in strong trends, bad in choppy ones)."
+        elif lev < 0:
+            txt = f"Inverse: aims to rise {abs(lev):g}× when {u} falls on a day (a short position). Resets daily — meant for short holding periods."
+        elif inc:
+            txt = (f"Income fund on {u}: sells options to pay large weekly/monthly distributions; it gives up much of the upside, "
+                   "so its price tends to drift lower while the payouts make up the return.")
+        elif cat == "Crypto":
+            coin = next((c for k, c in CRYPTO if k in n), "crypto")
+            txt = f"Gives exposure to {coin}" + (" by holding the coin itself (spot)." if re.search(r"trust|spot", n) and "futures" not in n
+                                                 else " through futures." if "futures" in n else " and related companies.")
+        elif cat == "Bonds & cash":
+            dur = ("very short-term" if re.search(r"t-bill|0-3 month|ultra-short|1-3 month|money market", n) else
+                   "long-term" if re.search(r"20\+|long|25\+|30", n) else "short-term" if "short" in n else "")
+            txt = f"Bond fund{(' — ' + dur + ' bonds') if dur else ''}: moves with interest rates (prices fall when rates rise)."
+        elif cat == "Commodities":
+            what = next((w for k, w in [("gold miners", "gold-mining stocks"), ("gold", "gold"), ("silver", "silver"), ("natural gas", "natural gas"),
+                                        ("crude", "crude oil"), ("oil", "oil"), ("copper", "copper"), ("uranium", "uranium"),
+                                        ("platinum", "platinum"), ("palladium", "palladium"), ("agricult", "farm commodities")] if k in n), "commodities")
+            how = " (holds the physical metal)" if re.search(r"trust|physical", n) and what in ("gold", "silver", "platinum", "palladium") else \
+                  " (through futures — returns can differ from the spot price)" if re.search(r"futures|oil|gas|commodit", n) else ""
+            txt = f"Tracks {what}{how}."
+        elif cat == "Volatility":
+            txt = "Tracks VIX futures: jumps when markets panic but loses value steadily in calm markets — a short-term hedge, not a hold."
+        elif cat == "International":
+            txt = "Holds stocks outside the US — returns also move with the US dollar."
+        elif cat == "Sectors & industries":
+            txt = "Holds stocks from one sector or industry."
+        elif cat == "Dividend":
+            txt = "Holds dividend-paying stocks; price return here leaves out the dividends."
+        elif cat == "Thematic":
+            txt = "Holds companies tied to one theme or trend (concentrated and often volatile)."
+        elif cat == "Broad market & factors":
+            txt = "Broad stock-market or factor fund (size, value, growth, quality, momentum)."
+        elif cat == "Single stock":
+            txt = f"Built around a single stock ({u})."
+        else:
+            txt = ""
+    return (f"Run by {iss}. " if iss else "") + txt
+
+
 def _r(x, n=1):
     try:
         x = float(x)
@@ -126,8 +184,11 @@ def _r(x, n=1):
 
 
 def build(w, ind, out_path, rs_all=None):
+    from .config import CONFIG
+    periods = list(CONFIG["ema"]["periods"])
     tick = load_all_tickers().drop_duplicates("ticker")
     stock_set = set(tick.loc[tick["type"].isin(["CS", "ADRC"]), "ticker"])
+    names = tick.set_index("ticker")["name"].to_dict()
     funds = tick[tick["type"].isin(FUND_TYPES)].set_index("ticker")
     c, v = w["close"], w["volume"]
     funds = funds[funds.index.isin(c.columns)]
@@ -172,7 +233,14 @@ def build(w, ind, out_path, rs_all=None):
                      "ytd": _r(ytd[t]), "hi": _r((lastp[t] / hi[t] - 1) * 100), "vol": _r(vol[t], 0), "dd": _r(mdd[t], 0),
                      "adv": _r(adv[t], 2), "tr": "L" if bool(lt.get(t, False)) else "S" if bool(stt.get(t, False)) else "",
                      "age": int((end - first[t]).days) if first[t] is not None else None,
-                     "x": 1 if jump.get(t, 0) > 1.5 else 0})
+                     "x": 1 if jump.get(t, 0) > 1.5 else 0,
+                     "e": [_r(ind["emas"][p][t].iloc[-1], 4) if t in ind["emas"][p] else None for p in periods],
+                     "since": first[t].strftime("%Y-%m-%d") if first[t] is not None else None,
+                     "ab": _about(t, name, iss, cat, lev, und, income, names.get(und) if und in stock_set else
+                                  {"QQQ": "the Nasdaq-100", "SPY": "the S&P 500", "IWM": "the Russell 2000", "DIA": "the Dow",
+                                   "SOXX": "semiconductor stocks", "BTC": "bitcoin", "ETH": "ether", "GLD": "gold",
+                                   "SLV": "silver", "USO": "oil", "UNG": "natural gas", "TLT": "long-term Treasuries",
+                                   "VIX": "VIX futures"}.get(und))})
     df = pd.DataFrame(rows).set_index("t")
     # leverage decay: leveraged fund 3M return vs leverage x underlying 3M return
     base = {}
@@ -189,6 +257,6 @@ def build(w, ind, out_path, rs_all=None):
                 df.at[t, "dec"] = _r(r["m3"] - exp)
     df["base"] = df["u"].map(lambda u: base.get(u))
     out = df.reset_index().replace({np.nan: None}).to_dict("records")
-    out_path.write_text(jsonsafe.dumps({"date": end.strftime("%Y-%m-%d"), "funds": out}, separators=(",", ":")))
+    out_path.write_text(jsonsafe.dumps({"date": end.strftime("%Y-%m-%d"), "ema": periods, "funds": out}, separators=(",", ":")))
     print(f"ETF tab: {len(out)} funds, {df['u'].notna().sum()} with an identified underlying")
     return out

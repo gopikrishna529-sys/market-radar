@@ -146,7 +146,9 @@ def build_email(result, bt=None, zp=None, brief=None):
         f'closed P&amp;L {usd(rpl)} from {len(closed)} trades ({wins} winners) · total {usd(upl + rpl)} '
         f'on ${D:,.0f} per position · tracking since {fd(zp.get("start"))}</p>',
         f'<p style="margin:0 0 8px"><a href="{site}#portfolio">Open the portfolio on the website →</a></p>' if site else "",
+        _mood_banner(brief.get("mood")),
         _tldr(result, zp, brief, opn, buys, sells, sold_today),
+        _mood_section(brief.get("mood"), h2, th, td),
         _portfolio_section(zp, opn, closed, h2, th, td, brief),
         _fills_section(brief, h2, th, td),
         f'<h2 {h2}>🟢 Buy at the next open ({len(buys)})</h2>'
@@ -247,10 +249,65 @@ def _tldr(result, zp, brief, opn, buys, sells, sold_today):
     dn = [x for x in (brief.get("zchanges") or {}).get("items", []) if x["held"] and x["kind"] == "rank" and (x["new"] or 9) > (x["old"] or 0)]
     if dn:
         watch.append(f"Zacks downgrades overnight: {', '.join(escape(x['t']) for x in dn[:4])}")
+    md = brief.get("mood") or {}
+    if md.get("mood"):
+        lines.append(f'Market mood: <b>{escape(md["mood"])}</b>'
+                     + (f' · VIX {md["vix"]:.1f}' if md.get("vix") is not None else "")
+                     + (f' · put/call {md["pcr_total"]:.2f}' if md.get("pcr_total") is not None else "") + f' — {escape(md.get("action", ""))}')
     lines.append("<b>Needs attention:</b> " + ("; ".join(watch) + "." if watch else "nothing urgent."))
     return ('<div style="background:#f3f7fd;border:1px solid #d6e4f7;border-radius:8px;padding:10px 14px;margin:8px 0 6px">'
             '<div style="font-weight:700;margin-bottom:4px">⏱ Yesterday in 30 seconds</div>'
             + "".join(f'<div style="margin:2px 0">• {x}</div>' for x in lines) + "</div>")
+
+
+def _mood_banner(m):
+    """Big red / amber box at the very top when VIX or the put/call ratio flash a warning."""
+    if not m or not (m.get("alerts") or m.get("changed")):
+        return ""
+    red = any(a["level"] == "red" for a in m.get("alerts", []))
+    bg, bd, ic = ("#fdecea", "#e57373", "🚨") if red else ("#fff6e0", "#f0b429", "⚠️")
+    lines = ([f"<b>{escape(m['changed'])}</b>"] if m.get("changed") else []) + [escape(a["text"]) for a in m.get("alerts", [])]
+    return (f'<div style="background:{bg};border:2px solid {bd};border-radius:8px;padding:10px 14px;margin:8px 0">'
+            f'<div style="font-size:16px;font-weight:800;margin-bottom:4px">{ic} Market alert — mood: {escape(m.get("mood", ""))}</div>'
+            + "".join(f'<div style="margin:3px 0">• {x}</div>' for x in lines)
+            + f'<div style="margin-top:6px;font-weight:700">What to do: {escape(m.get("action", ""))}</div></div>')
+
+
+def _mood_section(m, h2, th, td):
+    """VIX + put/call ratios with plain-English reading."""
+    if not m or (m.get("vix") is None and m.get("pcr_total") is None):
+        return ""
+    col = {"Bullish": "#0a7d38", "Neutral": "#555", "Cautious": "#d17a00", "Bearish": "#c62828"}.get(m.get("mood"), "#555")
+
+    def pcr_c(x, hi=1.0, lo=0.7):
+        return "–" if x is None else f'<b style="color:{"#c62828" if x > hi else "#0a7d38" if x < lo else "#222"}">{x:.2f}</b>'
+    rows = []
+    if m.get("vix") is not None:
+        z = m.get("vix_zone", "")
+        rows.append(["<b>VIX</b> (expected S&amp;P swings, next 30 days)",
+                     f'<b style="color:{"#0a7d38" if z in ("calm", "normal") else "#c62828"}">{m["vix"]:.1f}</b> '
+                     f'<span style="color:{_color(-(m.get("vix_chg") or 0))}">({m.get("vix_chg", 0):+.1f}%)</span>',
+                     f'20-day avg {m.get("vix_avg20", 0):.1f} · higher than {m.get("vix_pctl", 0)}% of the last year · {z}',
+                     "below 20 calm · 20–30 caution · above 30 panic"])
+    if m.get("term") is not None:
+        rows.append(["<b>VIX ÷ 3-month VIX</b> (term structure)",
+                     f'<b style="color:{"#c62828" if m["term"] >= 1 else "#0a7d38"}">{m["term"]:.2f}</b>',
+                     f'3-month VIX {m.get("vix3m", 0):.1f}', "below 1 normal · above 1 = stress (backwardation)"])
+    if m.get("pcr_total") is not None:
+        rows.append(["<b>Put/call ratio — all options</b>", pcr_c(m["pcr_total"]),
+                     f'yesterday {m.get("pcr_prev") or 0:.2f} · 5-day {m.get("pcr_avg5", 0):.2f} · 10-day {m.get("pcr_avg10", 0):.2f}',
+                     "below 1 = more calls (optimism) · above 1 = more puts (fear / hedging)"])
+        if m.get("pcr_equity") is not None:
+            rows.append(["<b>Put/call — stock options only</b>", pcr_c(m["pcr_equity"], 0.85, 0.5), "individual-stock traders",
+                         "0.5–0.85 normal · above ~1 extreme fear (often near bottoms) · below 0.5 greed"])
+    notes = "".join(f"<li>{escape(x)}</li>" for x in m.get("notes", []))
+    return (f'<h2 {h2}>😨 Fear gauges — mood: <span style="color:{col}">{escape(m.get("mood", ""))}</span></h2>'
+            + _tbl(th, td, ["Gauge", "Now", "Context", "How to read it"], rows)
+            + (f'<ul style="margin:4px 0 6px;padding-left:20px;line-height:1.5">{notes}</ul>' if notes else "")
+            + f'<p style="margin:0 0 6px"><b>What to do:</b> {escape(m.get("action", ""))}</p>'
+            '<p style="margin:0 0 10px;font-size:11px;color:#888">Put/call figures are Cboe totals for the previous session'
+            + (f' ({fmt_date(m.get("pcr_date"))})' if m.get("pcr_date") else "") + '. Note: “put-call parity” is an option-pricing formula '
+            '(how call and put prices must line up), not a sentiment signal — the put/call <i>ratio</i> is what shows fear vs greed.</p>')
 
 
 def _days_ahead(day, n):
